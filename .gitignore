@@ -1,0 +1,10 @@
+build/
+dist/
+*.o
+*.d
+*.dylib
+*.so
+*.dll
+*.vcvplugin
+.DS_Store
+speech/
