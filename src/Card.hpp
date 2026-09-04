@@ -31,6 +31,15 @@ struct Card : widget::Widget, OurWidget {
 	coordinates; an empty rectangle means anywhere is fine. */
 	void show(const std::string& text, math::Rect avoid);
 
+	/** Say something that is not narration, whether or not captions are on.
+
+	SCRIPTS ARE NORMALLY RUN WITH CAPTIONS OFF, because the speech carries the words. So nothing
+	the viewer must be told can go through the ordinary note: a failure written on a card that is
+	switched off is a failure nobody hears about, and the run just stops looking as though it did
+	nothing. This ignores the switch without changing it, so the next run is still captioned the
+	way its script asked. */
+	void alert(const std::string& text);
+
 	/** Pin the next note to a named berth, for the case where the computed one reads badly.
 	Zero to five, in the preference order below; anything else returns to computing it. */
 	void pin(int berth) { pinned = berth; }
@@ -48,6 +57,8 @@ private:
 	merged with it: two rectangles at opposite ends of the window merge into one that covers
 	everything between them, and then no berth is free. */
 	math::Rect avoidControls;
+	/** True while what is up is a message rather than narration. */
+	bool isAlert = false;
 	int pinned = -1;
 	/** Chosen on the first draw after the text changes, because choosing needs the text
 	measured and measuring needs a drawing context. */

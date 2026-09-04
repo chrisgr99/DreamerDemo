@@ -27,7 +27,19 @@ void Card::show(const std::string& t, math::Rect a) {
 		return;   // the same note again is the same note; do not restart its fade
 	text = t;
 	avoid = a;
+	isAlert = false;
 	avoidControls = transportRect();
+	berth = -1;
+	up = true;
+	shownAt = system::getTime();
+}
+
+
+void Card::alert(const std::string& t) {
+	text = t;
+	avoid = math::Rect();
+	avoidControls = transportRect();
+	isAlert = true;
 	berth = -1;
 	up = true;
 	shownAt = system::getTime();
@@ -38,6 +50,7 @@ void Card::hide() {
 	if (!up)
 		return;
 	up = false;
+	isAlert = false;
 	hiddenAt = system::getTime();
 }
 
@@ -67,7 +80,7 @@ math::Rect Card::berthRect(int which, math::Vec size) const {
 
 
 void Card::draw(const DrawArgs& args) {
-	if (!enabled)
+	if (!enabled && !isAlert)
 		return;
 	const double now = system::getTime();
 	float alpha = 1.f;

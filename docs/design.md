@@ -105,6 +105,8 @@ The card is one text place floating over the rack rather than docked beside it, 
 
 A note stays until the next note replaces it, so one note covers however many steps follow it.
 
+**Nothing a viewer must be told goes through the card.** Scripts are normally run with captions off, because the speech carries the words — so a failure written on the ordinary card is a failure nobody hears about, and the run simply stops looking as though it did nothing. A message that is not narration ignores the captions switch without changing it, so the next run is still captioned the way its script asked.
+
 **The card can be turned off, and often will be.** Experiment with the same system in DreamRack settled it: a demo reads better with the captions and the badges both down and the speech carrying the action. Written and spoken narration are the same words twice, and the eye leaves the thing being demonstrated in order to read. The card stays in the design because a demo without sound needs it, and because it is what an author reads while stepping through a script in silence.
 
 Turning either off changes nothing about the pacing. A note's hold is how long its own sentence takes, spoken or not, so the same script runs to the same length with them up or down and the two can be judged against each other.
