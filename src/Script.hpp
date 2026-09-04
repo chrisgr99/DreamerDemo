@@ -59,8 +59,15 @@ struct Script {
 	Pacing pacing;
 	bool badges = true;
 	bool captions = true;
-	/** The parameter ducked under the narration. Not used until speech arrives. */
+	/** The parameter pulled down while the narration speaks, and by how much. One recorded
+	audio track cannot be rebalanced afterwards, so the balance is set while it plays. */
 	std::string master;
+	float duck = 0.35f;      /**< what the master falls to, as a fraction of where it was */
+
+	/** The voice the narration is rendered in, and how fast it speaks. Declared beside the
+	words it will speak, because it is the same decision. */
+	std::string voice = "Jamie (Premium)";
+	int rate = 175;          /**< words per minute */
 	std::vector<Step> steps;
 
 	/** Empty when the file parsed. Anything else is what is wrong with it, with a line

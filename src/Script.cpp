@@ -327,6 +327,19 @@ Script scriptLoad(const std::string& path) {
 			else if (key == "master") {
 				sc.master = value;
 			}
+			else if (key == "duck") {
+				float f = 0.f;
+				if (readValue(value, &f))
+					sc.duck = math::clamp(f, 0.f, 1.f);
+			}
+			else if (key == "voice") {
+				sc.voice = value;
+			}
+			else if (key == "rate") {
+				const int r = std::atoi(value.c_str());
+				if (r > 0)
+					sc.rate = r;
+			}
 			else if (key == "pacing") {
 				for (const std::string& one : split(value, ',')) {
 					const std::vector<std::string> w = words(one);

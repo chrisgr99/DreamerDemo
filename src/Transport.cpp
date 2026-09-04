@@ -12,6 +12,7 @@ costs a viewer nothing.
 #include "Theatre.hpp"
 #include "Card.hpp"
 #include "Script.hpp"
+#include "Speech.hpp"
 
 #include <osdialog.h>
 
@@ -21,16 +22,16 @@ namespace demo {
 
 
 static const float T_TITLE = 22.f;
-static const float T_W = 828.f;
+static const float T_W = 902.f;
 static const float T_H = 76.f;
 static const float BTN_H = 30.f;
 static const float BTN_Y = T_TITLE + 12.f;
 static const float BTN_GAP = 8.f;
 static const float BTN_PAD = 12.f;
 
-enum Button { B_SCRIPT, B_RUN, B_RESTART, B_BACK, B_STEP, B_RATE, B_BADGES, B_CAPTIONS,
-	B_COUNT };
-static const float BTN_W[B_COUNT] = {224.f, 74.f, 86.f, 62.f, 62.f, 92.f, 78.f, 92.f};
+enum Button { B_SCRIPT, B_RUN, B_RESTART, B_BACK, B_STEP, B_RATE, B_VOICE, B_BADGES,
+	B_CAPTIONS, B_COUNT };
+static const float BTN_W[B_COUNT] = {224.f, 74.f, 86.f, 62.f, 62.f, 92.f, 66.f, 78.f, 92.f};
 
 static const float RATES[4] = {0.75f, 1.0f, 1.5f, 2.0f};
 
@@ -235,9 +236,26 @@ struct Transport : widget::OpaqueWidget {
 		runner.scriptPath = sc.path;
 		runner.title = sc.title.empty() ? system::getFilename(path) : sc.title;
 		runner.load(sc.steps);
+		runner.voice = sc.voice;
+		runner.voiceRate = sc.rate;
+		runner.master = sc.master;
+		runner.duck = sc.duck;
 		theatre()->badges = sc.badges;
 		card()->enabled = sc.captions;
 		stopped = false;
+		renderVoice();
+	}
+
+	/** RENDERED WHEN A SCRIPT IS LOADED, not when it is run. The first time a sentence is
+	written it has to be spoken by `say` and measured, which takes a moment; every time after it
+	is already on disk. Doing it here means Run is always immediate, and means a reworded note
+	cannot reach a take still speaking the old words. */
+	void renderVoice() {
+		if (!runner.speak || runner.steps.empty())
+			return;
+		const int made = runner.render();
+		if (made > 0)
+			INFO("DreamerDemo: rendered %d lines in %s", made, runner.voice.c_str());
 	}
 
 	/** THE SCRIPTS THERE ARE, plus the things an author does with them. A list rather than a file
@@ -302,6 +320,7 @@ struct Transport : widget::OpaqueWidget {
 			case B_BACK: return "Back";
 			case B_STEP: return "Step";
 			// Lit when on, so the label is the name of the thing rather than its state.
+			case B_VOICE: return "Voice";
 			case B_BADGES: return "Badges";
 			case B_CAPTIONS: return "Captions";
 			default: {
@@ -358,6 +377,13 @@ struct Transport : widget::OpaqueWidget {
 			case B_STEP:
 				stopped = true;
 				runner.stepOnce();
+				break;
+			case B_VOICE:
+				runner.speak = !runner.speak;
+				if (!runner.speak)
+					speechSilence();
+				else
+					renderVoice();
 				break;
 			case B_BADGES:
 				theatre()->badges = !theatre()->badges;
@@ -612,6 +638,7 @@ struct Transport : widget::OpaqueWidget {
 				continue;
 			}
 			const bool lit = (i == B_RUN && runner.isRunning())
+				|| (i == B_VOICE && runner.speak)
 				|| (i == B_BADGES && theatre()->badges)
 				|| (i == B_CAPTIONS && card()->enabled);
 			drawChip(args.vg, buttonRect(i), buttonLabel(i), lit);

@@ -2,6 +2,7 @@
 #include "Theatre.hpp"
 #include "Card.hpp"
 #include "Gesture.hpp"
+#include "Speech.hpp"
 
 #include <patch.hpp>
 
@@ -179,6 +180,42 @@ bool Runner::applyBindings(std::string* why) {
 		}
 	}
 	return true;
+}
+
+
+int Runner::render() {
+	std::vector<std::string> lines;
+	for (size_t i = 0; i < steps.size(); i++) {
+		if (!steps[i].note.empty())
+			lines.push_back(steps[i].note);
+	}
+	return speechRender(lines, voice, voiceRate);
+}
+
+
+/** DUCKED WHILE THE VOICE IS SPEAKING, and put back after. The take is one audio track — screen
+and computer audio together — so there is no balance to fix afterwards and it has to be right
+while it plays. The parameter named in the header is moved like any other, so nothing here needs
+a mechanism the runner does not already have. */
+void Runner::duckDown() {
+	if (ducked || master.empty())
+		return;
+	const Target t = stage.find(master);
+	if (!t.ok || t.paramId < 0)
+		return;
+	duckedFrom = gParamUnit(t);
+	gSetParam(t, duckedFrom * duck);
+	ducked = true;
+}
+
+
+void Runner::duckUp() {
+	if (!ducked)
+		return;
+	ducked = false;
+	const Target t = stage.find(master);
+	if (t.ok && t.paramId >= 0)
+		gSetParam(t, duckedFrom);
 }
 
 
@@ -581,6 +618,7 @@ void Runner::begin(int i) {
 	}
 	snapshot(i);
 	const Step& s = steps[i];
+	float spoken = 0.f;
 	if (!s.note.empty()) {
 		const math::Rect region = regionFor(stage, steps, i);
 		// THE TRANSPORT MOVES FIRST, because it is an opaque window and a click aimed underneath
@@ -588,11 +626,23 @@ void Runner::begin(int i) {
 		// where the transport has ended up rather than where it was.
 		transportStepAside(region);
 		card()->show(s.note, region);
+		if (speak) {
+			duckDown();
+			spoken = speechPlay(s.note);
+		}
 	}
 	expand(s);
 	if (!running)
 		return;   // expand() failed and stopped the run
-	enter(NOTE, s.note.empty() ? 0.f : pacing.hold);
+
+	// NOTHING IS EVER TIME-STRETCHED. The sentence sets the floor and the rate multiplier
+	// squeezes only the silence around it, so a hold is whichever is longer: the script's own
+	// number, or however long the line actually takes to say. A note with no audio — nothing
+	// rendered, or the voice switched off — falls back to the number.
+	const float hold = s.note.empty() ? 0.f : pacing.hold;
+	enter(NOTE, hold);
+	if (spoken > 0.f)
+		until = std::fmax(until, system::getTime() + spoken);
 }
 
 
@@ -630,6 +680,10 @@ void Runner::run() {
 void Runner::stop() {
 	running = false;
 	phase = IDLE;
+	// A DEMO THAT STOPS STOPS TALKING, and gives the level back. Leaving a sentence running over
+	// a rack that is no longer doing anything is the one thing a viewer cannot explain.
+	speechSilence();
+	duckUp();
 
 	// THE BUTTON GOES BACK UP, whatever else happens. A demo stopped between a button-down and
 	// its button-up leaves Rack believing a drag is still in progress, and the half-made cable
@@ -887,6 +941,12 @@ void Runner::tick() {
 		return;
 
 	const double now = system::getTime();
+
+	// THE LEVEL COMES BACK THE MOMENT THE VOICE STOPS, not at the end of the step. A note holds
+	// for as long as its sentence takes and often longer, and the patch should be at full level
+	// for that remainder rather than under a voice that has finished.
+	if (ducked && !speechSounding())
+		duckUp();
 
 	// PER-FRAME WORK, which happens whether or not the current pause has run out. A drag is a
 	// stream of movements rather than an event, and a value travels rather than jumping.

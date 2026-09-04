@@ -127,21 +127,27 @@ A control that is off screen is a script error rather than a position to point a
 
 Speech is rendered ahead of the take rather than spoken live, and the plugin renders it itself. Loading a script hashes every line of its prose, and any line with no audio file yet is rendered on the spot with the Mac's `say` in the voice the script names. `afinfo` then reports how long the file lasts. Both are already on the machine; there is no build step and no tool to run.
 
+Rendering happens when a script is **loaded**, not when it is run, so Run is always immediate and a reworded note cannot reach a take still speaking the old words. A voice the machine does not have renders nothing, and would do it in silence — every note falling back to its written hold with no sign of why — so a missing voice is checked for and said out loud in the log.
+
 The duration is the point. A note holds for as long as its own sentence takes, and nothing is ever time-stretched: speech sets the floor and the rate multiplier squeezes only the silences around it. That number cannot be known without rendering first. Rendering also makes a second take of a script identical to the first, which speaking live would not.
 
 Keying by a hash of the text means re-wording one note re-renders one file, and a script whose wording has not changed loads instantly. It also removes the failure that a separate rendering step invites, where a note is reworded, the render is forgotten, and the take speaks the old sentence with nothing on screen to say so.
 
 A script is therefore self-contained: a markdown file and the plugin, with the audio a cache beside it that can be deleted at any time.
 
-The plugin plays a fragment by spawning `afplay`, and knows when it ends from the measured duration rather than by waiting on the process. ScreenFlow records the computer audio, so the narration and the patch arrive in the take already mixed.
+The plugin plays a fragment by spawning `afplay`, and knows when it ends from the measured duration rather than by waiting on the process — so a frame is never blocked by a program starting. ScreenFlow records the computer audio, so the narration and the patch arrive in the take already mixed.
+
+A note's hold is then whichever is longer: the number the script gave it, or however long the line actually takes to say. A demo that stops, stops talking.
 
 ## Ducking
 
 One recorded audio track means the balance cannot be fixed afterwards, so the runner sets it while it plays.
 
-A script names the patch's master level in its header. For the length of each narration fragment the runner takes that parameter down by a stated number of decibels and puts it back after, moving it over a short ramp so the change is not a step. It is a parameter like any other, so this needs no mechanism beyond the one that performs a `set`.
+A script names the patch's master level in its header, and what it should fall to. The runner pulls that parameter down as a line begins and puts it back the moment the voice stops rather than at the end of the step — a note holds for as long as its sentence and often longer, and the patch should be at full level for the remainder rather than under a voice that has finished. It is a parameter like any other, so this needs no mechanism beyond the one that performs a `set`.
 
 Where a patch has no obvious master, the header may name any parameter, or none, in which case nothing is ducked.
+
+The header therefore carries `Voice`, `Rate`, `Master` and `Duck` alongside the pacing, because the voice and the words it will speak are one decision and belong in one place.
 
 ## Recording
 
@@ -202,5 +208,5 @@ Each phase stands alone and is worth having before the next exists.
 1. **The overlay and the theatre** — the transport window, the synthetic pointer, the badge, the ripple, the card and its berths. *Done.*
 2. **Gestures and control resolution** — names to widgets to positions, and the seven gestures injected into Rack's event system, each asserting its result. *Done.*
 3. **The script and the runner** — the markdown parser, the step vocabulary, the pacing, snapshots and stepping. *Done.*
-4. **Narration** — hashing, `say`, `afinfo`, `afplay`, and ducking.
+4. **Narration** — hashing, `say`, `afinfo`, `afplay`, and ducking. *Done.*
 5. **The first video** — a script for mpxChart, which is the module that most needs showing rather than describing.

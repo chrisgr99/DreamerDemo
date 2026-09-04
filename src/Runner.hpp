@@ -82,6 +82,22 @@ struct Runner {
 	std::string patchPath;
 	std::string scriptPath, title;
 
+	/** THE NARRATION. A note's hold becomes however long its own sentence takes: speech sets the
+	floor and the rate multiplier squeezes only the silences around it, because a sentence played
+	faster is a sentence nobody can follow. */
+	bool speak = true;
+	std::string voice = "Jamie (Premium)";
+	int voiceRate = 175;
+
+	/** The parameter pulled down while a line is spoken, and what it falls to. One recorded
+	audio track cannot be rebalanced afterwards, so the balance is made while it plays. */
+	std::string master;
+	float duck = 0.35f;
+
+	/** Renders any line of this script that has no audio yet. Called when a script is loaded,
+	not when it is run, because rendering is slow the first time and instant after. */
+	int render();
+
 	/** Empty unless a step's own check failed. The run stops and this is what it says. */
 	std::string failure;
 
@@ -153,6 +169,12 @@ private:
 
 	Target checkA, checkB;
 	int checkCount = 0;
+
+	/** What the master was before the narration pulled it down, and whether it is down. */
+	bool ducked = false;
+	float duckedFrom = 0.f;
+	void duckDown();
+	void duckUp();
 
 	void begin(int i);
 	void enter(Phase p, float seconds);
