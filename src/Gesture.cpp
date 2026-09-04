@@ -3,6 +3,9 @@
 
 #include <GLFW/glfw3.h>
 
+#include <chrono>
+#include <thread>
+
 namespace demo {
 
 
@@ -39,6 +42,16 @@ void gClick(math::Vec pos, int button) {
 	// first delivers the press to wherever the real mouse was left.
 	gHover(pos, math::Vec(0.f, 0.f));
 	gPress(pos, button);
+	gRelease(pos, button);
+}
+
+
+void gClickHeld(math::Vec pos, int button) {
+	gHover(pos, math::Vec(0.f, 0.f));
+	gPress(pos, button);
+	// Long enough for the engine and every module widget to see the button down at least once.
+	// This runs only when an author is stepping through a script, never during a take.
+	std::this_thread::sleep_for(std::chrono::milliseconds(40));
 	gRelease(pos, button);
 }
 

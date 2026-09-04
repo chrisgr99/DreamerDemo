@@ -296,31 +296,68 @@ static math::Rect regionFor(const Stage& stage, const std::vector<Step>& steps, 
 }
 
 
-/** WHERE THE VIEW IS AIMED, worked out by asking Rack to aim it and then putting it back.
+/** THE VIEW, IN MODULE COORDINATES.
 
-zoomToBound already knows how to fit a bound to the viewport, and reimplementing that arithmetic
-would be one more thing to keep in step with the host. So the target is measured by applying it,
-reading what it produced, and restoring what was there — all inside one frame, so nothing is
-drawn in between. */
+Rack keeps the view as a scroll offset in pixels and a zoom, and offers a grid offset measured
+from an origin constant. Both are awkward to move smoothly: a pixel offset means something
+different at every zoom, and the grid one has that constant in it. What a camera actually has is
+a place it is looking at and how close it is, and those two are independent — so that is what is
+interpolated, and the offset is worked out from them on every frame.
+
+The arithmetic is Rack's own, from zoomToBound: the offset that puts a module-space point in the
+middle of the viewport is that point times the zoom, less half the viewport. */
+static math::Vec viewCentre() {
+	app::RackScrollWidget* scroll = APP->scene->rackScroll;
+	if (!scroll)
+		return math::Vec();
+	const float zoom = std::fmax(0.0001f, scroll->getZoom());
+	return scroll->offset.plus(scroll->box.size.div(2.f)).div(zoom);
+}
+
+
+/** The zoom at which a bound fills the viewport, with the same margin Rack leaves. */
+static float zoomForBound(math::Rect bound) {
+	app::RackScrollWidget* scroll = APP->scene->rackScroll;
+	if (!scroll)
+		return 1.f;
+	const math::Vec size = scroll->box.size;
+	bound = bound.grow(math::Vec(24.f, 24.f));
+	if (bound.size.x <= 1.f || bound.size.y <= 1.f)
+		return scroll->getZoom();
+	return std::fmin(size.x / bound.size.x, size.y / bound.size.y);
+}
+
+
+void Runner::camApply(math::Vec centre, float zoom) {
+	app::RackScrollWidget* scroll = APP->scene->rackScroll;
+	if (!scroll)
+		return;
+	scroll->zoomWidget->setZoom(zoom);
+	scroll->offset = centre.mult(zoom).minus(scroll->box.size.div(2.f));
+}
+
+
 void Runner::camTo(math::Rect bound, float seconds) {
 	app::RackScrollWidget* scroll = APP->scene->rackScroll;
 	if (!scroll)
 		return;
+	camZoomFrom = scroll->getZoom();
+	camCentreFrom = viewCentre();
+	camZoomTo = math::clamp(zoomForBound(bound), 0.1f, 4.f);
+	camCentreTo = bound.getCenter();
+	camStart = system::getTime();
+	camEnd = camStart + std::fmax(0.05f, seconds) / std::fmax(0.1f, rate);
+	camMoving = true;
+}
 
-	const float zoom0 = scroll->getZoom();
-	const math::Vec grid0 = scroll->getGridOffset();
 
-	scroll->zoomToBound(bound);
-	const float zoom1 = scroll->getZoom();
-	const math::Vec grid1 = scroll->getGridOffset();
-
-	scroll->setZoom(zoom0);
-	scroll->setGridOffset(grid0);
-
-	camZoomFrom = zoom0;
-	camZoomTo = zoom1;
-	camGridFrom = grid0;
-	camGridTo = grid1;
+void Runner::camCentre(math::Vec centre, float seconds) {
+	app::RackScrollWidget* scroll = APP->scene->rackScroll;
+	if (!scroll)
+		return;
+	camZoomFrom = camZoomTo = scroll->getZoom();
+	camCentreFrom = viewCentre();
+	camCentreTo = centre;
 	camStart = system::getTime();
 	camEnd = camStart + std::fmax(0.05f, seconds) / std::fmax(0.1f, rate);
 	camMoving = true;
@@ -330,10 +367,8 @@ void Runner::camTo(math::Rect bound, float seconds) {
 void Runner::camTick() {
 	if (!camMoving)
 		return;
-	app::RackScrollWidget* scroll = APP->scene->rackScroll;
-	if (!scroll) {
+	if (!APP->scene->rackScroll) {
 		camMoving = false;
-	camPointTarget.clear();
 		return;
 	}
 	const double now = system::getTime();
@@ -348,8 +383,7 @@ void Runner::camTick() {
 	// GEOMETRIC IN ZOOM. Halfway between one and four is two, not two and a half.
 	const float zoom = camZoomFrom
 		* std::pow(camZoomTo / std::fmax(0.0001f, camZoomFrom), t);
-	scroll->setZoom(zoom);
-	scroll->setGridOffset(camGridFrom.plus(camGridTo.minus(camGridFrom).mult(t)));
+	camApply(camCentreFrom.plus(camCentreTo.minus(camCentreFrom).mult(t)), zoom);
 
 	// The pointer arrives as the view settles. Its destination is asked for again on every
 	// frame, because the module is travelling across the screen while the camera closes on it —
@@ -366,34 +400,22 @@ void Runner::camTick() {
 }
 
 
-/** The rectangle the view is showing now, in module coordinates. */
-static math::Rect viewBound() {
-	app::RackScrollWidget* scroll = APP->scene->rackScroll;
-	if (!scroll)
-		return math::Rect();
-	const float zoom = std::fmax(0.0001f, scroll->getZoom());
-	const math::Vec grid = scroll->getGridOffset();
-	return math::Rect(
-		math::Vec(grid.x * RACK_GRID_WIDTH, grid.y * RACK_GRID_HEIGHT),
-		scroll->box.size.div(zoom));
-}
-
-
 void Runner::instant(const Step& s) {
 	// Steps with no pointer in them. They happen at once, and the note beside them is what tells
 	// the viewer that something has changed.
 	switch (s.kind) {
 		case Step::ZOOM: {
 			if (s.target.empty()) {
-				// The whole rack. Measured the same way as any other target so that it eases
-				// there rather than cutting.
-				app::RackScrollWidget* scroll = APP->scene->rackScroll;
-				const float z0 = scroll->getZoom();
-				const math::Vec g0 = scroll->getGridOffset();
-				scroll->zoomToModules();
-				const math::Rect all = viewBound();
-				scroll->setZoom(z0);
-				scroll->setGridOffset(g0);
+				// THE WHOLE RACK, as the union of what is on it. Asked of the modules rather
+				// than of Rack's own framing call, so that it eases there rather than cutting.
+				math::Rect all;
+				bool any = false;
+				for (app::ModuleWidget* mw : APP->scene->rack->getModules()) {
+					all = any ? all.expand(mw->box) : mw->box;
+					any = true;
+				}
+				if (!any)
+					break;
 				camPointTarget.clear();
 				camTo(all, pacing.perform);
 				break;
@@ -414,26 +436,22 @@ void Runner::instant(const Step& s) {
 		}
 
 		case Step::PAN: {
-			// PANNING IS ZOOMING TO A BOUND THE SIZE OF THE VIEW. Keeping the bound the size of
-			// what is already visible means the fit produces the zoom it already had, and only
-			// the offset changes.
-			const math::Rect view = viewBound();
-			math::Rect want = view;
+			// PANNING MOVES WHERE THE VIEW IS LOOKING and leaves how close it is alone.
+			math::Vec want;
 			if (!s.target.empty()) {
 				const Target t = stage.find(s.target);
 				if (!t.ok || !t.mw) {
 					fail("Step " + std::to_string(index + 1) + ": " + t.why + ".");
 					return;
 				}
-				const math::Vec centre = t.mw->box.pos.plus(t.mw->box.size.div(2.f));
-				want.pos = centre.minus(view.size.div(2.f));
+				want = t.mw->box.getCenter();
 			}
 			else {
-				want.pos = view.pos.plus(math::Vec(s.value * RACK_GRID_WIDTH,
+				want = viewCentre().plus(math::Vec(s.value * RACK_GRID_WIDTH,
 					s.value2 * RACK_GRID_HEIGHT));
 			}
 			camPointTarget.clear();
-			camTo(want, pacing.perform);
+			camCentre(want, pacing.perform);
 			break;
 		}
 
@@ -937,9 +955,11 @@ void Runner::stepOnce() {
 					theatre()->placeAt(r.pos.plus(r.size.div(2.f)));
 				break;
 			}
-			case Gest::CLICK_L: gClick(g.pos, GLFW_MOUSE_BUTTON_LEFT); break;
-			case Gest::CLICK_R: gClick(g.pos, GLFW_MOUSE_BUTTON_RIGHT); break;
-			case Gest::CLICK_HERE: gClick(theatre()->at(), GLFW_MOUSE_BUTTON_LEFT); break;
+			// Even collapsed, a click has to span a frame or a momentary button will not see
+			// it. Stepping is for an author, so a moment of waiting costs nothing.
+			case Gest::CLICK_L: gClickHeld(g.pos, GLFW_MOUSE_BUTTON_LEFT); break;
+			case Gest::CLICK_R: gClickHeld(g.pos, GLFW_MOUSE_BUTTON_RIGHT); break;
+			case Gest::CLICK_HERE: gClickHeld(theatre()->at(), GLFW_MOUSE_BUTTON_LEFT); break;
 			case Gest::DOWN:
 				gHover(g.pos, math::Vec());
 				gPress(g.pos, GLFW_MOUSE_BUTTON_LEFT);
@@ -1020,10 +1040,21 @@ void Runner::startGest() {
 			enter(PERFORM, pacing.perform);
 			break;
 
+		// A CLICK IS HELD, NOT INSTANTANEOUS.
+		//
+		// Pressing and releasing in the same frame is invisible to anything that watches a
+		// parameter for an edge — and a momentary button is exactly that: it rises on the press
+		// and falls on the release, so a module stepping once per frame sees it at rest both
+		// times and never learns it was pressed. That is why the chart button did nothing. The
+		// button goes down here and comes up when the gesture ends, which is also what a real
+		// click does.
 		case Gest::CLICK_L:
 		case Gest::CLICK_HERE:
-			gClick(g.act == Gest::CLICK_HERE ? theatre()->at() : g.pos,
-				GLFW_MOUSE_BUTTON_LEFT);
+			if (g.act == Gest::CLICK_HERE)
+				g.pos = theatre()->at();
+			gHover(g.pos, math::Vec());
+			gPress(g.pos, GLFW_MOUSE_BUTTON_LEFT);
+			buttonDown = true;
 			theatre()->ripple();
 			if (g.glow.size.x > 0.f)
 				theatre()->glow(g.glow, 0.9f);
@@ -1031,7 +1062,8 @@ void Runner::startGest() {
 			break;
 
 		case Gest::CLICK_R:
-			gClick(g.pos, GLFW_MOUSE_BUTTON_RIGHT);
+			gHover(g.pos, math::Vec());
+			gPress(g.pos, GLFW_MOUSE_BUTTON_RIGHT);
 			theatre()->ripple();
 			if (g.glow.size.x > 0.f)
 				theatre()->glow(g.glow, 0.9f);
@@ -1168,13 +1200,23 @@ void Runner::tick() {
 			startGest();
 			break;
 
-		case PERFORM:
+		case PERFORM: {
+			// The button comes up at the end of the click it went down for.
+			Gest& g = gests[gi];
+			if (g.act == Gest::CLICK_L || g.act == Gest::CLICK_HERE) {
+				gRelease(g.pos, GLFW_MOUSE_BUTTON_LEFT);
+				buttonDown = false;
+			}
+			else if (g.act == Gest::CLICK_R) {
+				gRelease(g.pos, GLFW_MOUSE_BUTTON_RIGHT);
+			}
 			// A MOVE WAITS WHERE IT LANDED. This pause is the whole of "announce, then do": the
 			// pointer is on the control and nothing has happened yet, which is the moment the
 			// viewer needs in order to see what is about to be acted on.
-			enter(SETTLE, (gests[gi].act == Gest::MOVE || gests[gi].act == Gest::MENU_MOVE)
+			enter(SETTLE, (g.act == Gest::MOVE || g.act == Gest::MENU_MOVE)
 				? pacing.arrive : pacing.settle);
 			break;
+		}
 
 		case SETTLE:
 			if (gi >= (int) gests.size())

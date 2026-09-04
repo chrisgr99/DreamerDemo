@@ -184,7 +184,10 @@ private:
 	bool camMoving = false;
 	double camStart = 0.0, camEnd = 0.0;
 	float camZoomFrom = 1.f, camZoomTo = 1.f;
-	math::Vec camGridFrom, camGridTo;
+	/** WHERE THE VIEW IS LOOKING, in module coordinates, rather than a scroll offset in pixels.
+	A pixel offset means something different at every zoom, so interpolating one while the zoom
+	is also changing describes a curve nobody asked for. A centre and a zoom are independent. */
+	math::Vec camCentreFrom, camCentreTo;
 	/** THE POINTER TRAVELS WITH THE CAMERA when the move is a zoom onto something.
 
 	Zooming to a module means "look at this", and the pointer is what says which thing is being
@@ -198,6 +201,9 @@ private:
 
 	/** Aims the camera at a bound in module coordinates, and starts the move. */
 	void camTo(math::Rect bound, float seconds);
+	/** Moves the view to a centre without changing how close it is. */
+	void camCentre(math::Vec centre, float seconds);
+	void camApply(math::Vec centre, float zoom);
 	void camTick();
 
 	/** WHERE THE MASTER RESTS, captured once when a run starts rather than each time the voice

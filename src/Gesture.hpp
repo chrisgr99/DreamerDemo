@@ -29,6 +29,13 @@ void gHover(math::Vec pos, math::Vec delta);
 void gPress(math::Vec pos, int button);
 void gRelease(math::Vec pos, int button);
 void gClick(math::Vec pos, int button);
+
+/** A click that spans a frame rather than happening inside one.
+
+A press and a release in the same frame are invisible to anything watching a parameter for an
+edge, and a momentary button is exactly that — it rises on the press and falls on the release, so
+a module stepping once per frame sees it at rest both times. */
+void gClickHeld(math::Vec pos, int button);
 void gScroll(math::Vec pos, math::Vec delta);
 
 /** Put a parameter at a fraction of its own range, without touching the widget. */
