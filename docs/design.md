@@ -163,6 +163,8 @@ The runner pulls that parameter down as a line begins and puts it back the momen
 
 Where a patch has no obvious master, the header may name any parameter, or none, in which case nothing is ducked.
 
+`Duck` is in **decibels**, because that is the only unit in which "duck it a bit" means the same thing on two different faders — a fraction of a parameter's own range says nothing about how much quieter anything got. A fader that displays decibels is asked for its current reading less the duck, which is right whatever curve it uses underneath; anything else is treated as a linear gain and scaled, which is what a level control is even when it does not say so. Ten decibels by default.
+
 The header therefore carries `Voice`, `Rate`, `Master` and `Duck` alongside the pacing, because the voice and the words it will speak are one decision and belong in one place.
 
 ## Recording

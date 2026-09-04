@@ -93,7 +93,7 @@ struct Runner {
 	/** The parameter pulled down while a line is spoken, and what it falls to. One recorded
 	audio track cannot be rebalanced afterwards, so the balance is made while it plays. */
 	std::string master;
-	float duck = 0.35f;
+	float duck = 10.f;       /**< decibels */
 
 	/** Renders any line of this script that has no audio yet. Called when a script is loaded,
 	not when it is run, because rendering is slow the first time and instant after. */
@@ -206,6 +206,7 @@ private:
 	nothing left that knows what to put back. Once per run cannot compound, and one restore puts
 	it right however many lines were spoken. */
 	bool haveRest = false;
+	/** The parameter's own value, not a fraction of its range, so it can be put back exactly. */
 	float masterRest = 0.f;
 	bool ducked = false;
 	void duckCapture();

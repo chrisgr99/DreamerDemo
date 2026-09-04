@@ -345,9 +345,12 @@ Script scriptLoad(const std::string& path) {
 				sc.master = value;
 			}
 			else if (key == "duck") {
-				float f = 0.f;
-				if (readValue(value, &f))
-					sc.duck = math::clamp(f, 0.f, 1.f);
+				// DECIBELS, because that is the only unit in which "duck it a bit" means the
+				// same thing on two different faders. A fraction of a parameter's own range
+				// says nothing about how much quieter anything got.
+				const float f = (float) std::atof(value.c_str());
+				if (f > 0.f)
+					sc.duck = math::clamp(f, 0.f, 60.f);
 			}
 			else if (key == "voice") {
 				sc.voice = value;

@@ -6,7 +6,7 @@
 **Badges** off
 **Captions** off
 **Master** audio:Level
-**Duck** 35%
+**Duck** 10 dB
 **Pacing** perform 1.2, arrive 1.0, beat 0.7, settle 0.7, hold 2.4
 
 ## zoom chart 1.4

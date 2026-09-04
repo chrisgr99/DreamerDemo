@@ -197,18 +197,27 @@ int Runner::render() {
 and computer audio together — so there is no balance to fix afterwards and it has to be right
 while it plays. The parameter named in the header is moved like any other, so nothing here needs
 a mechanism the runner does not already have. */
+/** The parameter named as the master, or nothing. */
+static engine::ParamQuantity* masterOf(const Stage& stage, const std::string& master) {
+	if (master.empty())
+		return NULL;
+	const Target t = stage.find(master);
+	if (!t.ok || !t.module || t.paramId < 0)
+		return NULL;
+	return t.module->paramQuantities[t.paramId];
+}
+
+
 void Runner::duckCapture() {
 	haveRest = false;
 	ducked = false;
-	if (master.empty())
+	engine::ParamQuantity* q = masterOf(stage, master);
+	if (!q)
 		return;
-	const Target t = stage.find(master);
-	if (!t.ok || t.paramId < 0)
-		return;
-	masterRest = gParamUnit(t);
-	// NOTHING TO DUCK. A master already at the bottom would be multiplied by a third and left
-	// there, and the demo would look like the thing that silenced the patch.
-	if (masterRest <= 0.001f)
+	masterRest = q->getValue();
+	// NOTHING TO DUCK. A master already at the bottom would be pulled down and left there, and
+	// the demo would look like the thing that silenced the patch.
+	if (masterRest <= q->getMinValue() + 0.0001f)
 		return;
 	haveRest = true;
 }
@@ -217,10 +226,20 @@ void Runner::duckCapture() {
 void Runner::duckDown() {
 	if (ducked || !haveRest)
 		return;
-	const Target t = stage.find(master);
-	if (!t.ok || t.paramId < 0)
+	engine::ParamQuantity* q = masterOf(stage, master);
+	if (!q)
 		return;
-	gSetParam(t, masterRest * duck);
+
+	// DECIBELS, WHERE THE PARAMETER SPEAKS THEM. A fader that displays decibels is asked for its
+	// current reading less the duck, which is exactly right whatever curve it uses underneath.
+	// Anything else is treated as a linear gain and scaled, which is what a level control is
+	// even when it does not say so.
+	if (q->unit == " dB" || q->unit == "dB") {
+		q->setDisplayValue(q->getDisplayValue() - duck);
+	}
+	else {
+		q->setValue(masterRest * std::pow(10.f, -duck / 20.f));
+	}
 	ducked = true;
 }
 
@@ -229,12 +248,12 @@ void Runner::duckUp() {
 	if (!haveRest)
 		return;
 	ducked = false;
-	// PUT BACK UNCONDITIONALLY, not only when this runner believes it is down. A level left low
-	// is the one failure a viewer cannot diagnose: the patch simply makes no sound, and nothing
-	// on screen says why.
-	const Target t = stage.find(master);
-	if (t.ok && t.paramId >= 0)
-		gSetParam(t, masterRest);
+	// PUT BACK EXACTLY, and unconditionally rather than only when this runner believes it is
+	// down. A level left low is the one failure a viewer cannot diagnose: the patch simply makes
+	// no sound, and nothing on screen says why.
+	engine::ParamQuantity* q = masterOf(stage, master);
+	if (q)
+		q->setValue(masterRest);
 }
 
 

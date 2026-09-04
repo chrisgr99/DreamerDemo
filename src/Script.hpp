@@ -62,7 +62,7 @@ struct Script {
 	/** The parameter pulled down while the narration speaks, and by how much. One recorded
 	audio track cannot be rebalanced afterwards, so the balance is set while it plays. */
 	std::string master;
-	float duck = 0.35f;      /**< what the master falls to, as a fraction of where it was */
+	float duck = 10.f;       /**< how far the master falls while a line is spoken, in decibels */
 
 	/** The voice the narration is rendered in, and how fast it speaks. Declared beside the
 	words it will speak, because it is the same decision. */
