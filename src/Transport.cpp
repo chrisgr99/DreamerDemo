@@ -657,11 +657,28 @@ static bool gRaising = false;
 
 void Transport::onRemove(const RemoveEvent& e) {
 	if (!gRaising) {
-		runner.stop();
-		if (gClosing)
+		// NOTHING IN THE APPLICATION IS TOUCHED UNLESS WE KNOW IT IS STILL THERE.
+		//
+		// This handler runs for two entirely different reasons and cannot tell them apart from
+		// the event: somebody closed the window, or Rack is exiting and destroying the scene. In
+		// the second case the rack, the engine and every module have already gone, and anything
+		// that reaches for one of them is reading freed memory. Stopping a run asks the rack for
+		// half-made cables, hands the level back through a module's parameter and injects a
+		// mouse release — all of which are fine on a close and fatal on an exit.
+		//
+		// A deliberate close is the only case in which the application is known to be alive, so
+		// it is the only case that does any of it.
+		if (gClosing) {
+			runner.stop();
 			runner.releaseSession();
-		if (gCard)
-			gCard->hide();
+			if (gCard)
+				gCard->hide();
+		}
+		else {
+			// The one thing worth doing on the way out, because it is a separate process and
+			// would otherwise carry on talking after Rack has gone.
+			speechSilence();
+		}
 		if (gTransport == this)
 			gTransport = NULL;
 	}

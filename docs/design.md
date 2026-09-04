@@ -189,7 +189,11 @@ The user's own patch is snapshotted the same way before a demo starts, and hande
 
 **Not on the last step.** A script that reaches its end leaves the rack it built standing. A take that cut back to the viewer's own patch on the final frame would be unusable, and an author wants to look at what the demo made. So the end of a script puts the window into the same state as a Stop — the button reads Reset — and one press hands the patch back. A failed step lands in the same place.
 
-**Not on exit either.** A remove event says nothing about why it fired: it fires when the window is closed and again when Rack destroys the scene at quit. Loading a patch inside the application's own teardown reaches a patch manager that is already half gone, which is a crash on the way out and a patch silently replaced. So the restore is done only for a close somebody asked for, and the patch history is what recovers a rack the demo was still holding when Rack exited.
+**Not on exit either, and nor is anything else.** A remove event says nothing about why it fired: it fires when the window is closed, and again when Rack destroys the scene at quit. On an exit the rack, the engine and every module have already gone, so anything that reaches for one of them is reading freed memory — loading a patch, asking the rack for half-made cables, handing a ducked level back through a module's parameter, injecting a mouse release. All of those are correct on a close and fatal on an exit.
+
+A deliberate close is the only case in which the application is known to be alive, so it is the only case that does any of them. On the way out the only thing done is silencing the narration, because that is a separate process and would otherwise carry on talking after Rack has gone. The patch history is what recovers a rack the demo was still holding.
+
+The cost is a small window: quitting in the middle of a spoken line leaves the master ducked, and Rack's autosave may keep it. The window is a second or two, since the level is handed back the moment each line ends.
 
 Rack's autosave is left alone; the demo's patches are written to a directory of the plugin's own.
 
