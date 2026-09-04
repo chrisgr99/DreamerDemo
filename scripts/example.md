@@ -3,7 +3,7 @@
 **Badges** off
 **Captions** off
 **Voice** Karen (Premium)
-**Rate** 175
+**Rate** 193
 **Pacing** perform 1.1, arrive 0.9, beat 0.7, settle 0.6, hold 2.6
 
 ## say

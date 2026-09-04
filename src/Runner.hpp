@@ -88,7 +88,7 @@ struct Runner {
 	faster is a sentence nobody can follow. */
 	bool speak = true;
 	std::string voice = "Karen (Premium)";
-	int voiceRate = 175;
+	int voiceRate = 193;
 
 	/** The parameter pulled down while a line is spoken, and what it falls to. One recorded
 	audio track cannot be rebalanced afterwards, so the balance is made while it plays. */

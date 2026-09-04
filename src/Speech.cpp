@@ -34,10 +34,13 @@ std::string speechDir() {
 
 /** FNV-1a, which is enough here: the only thing riding on it is that two different sentences get
 two different file names, and a wrong answer costs one re-render. */
-std::string speechId(const std::string& text) {
+std::string speechId(const std::string& text, const std::string& voice, int rate) {
+	char rateBuf[16];
+	std::snprintf(rateBuf, sizeof(rateBuf), "%d", rate);
+	const std::string all = text + "\x1f" + voice + "\x1f" + rateBuf;
 	uint64_t h = 1469598103934665603ULL;
-	for (size_t i = 0; i < text.size(); i++) {
-		h ^= (uint64_t) (unsigned char) text[i];
+	for (size_t i = 0; i < all.size(); i++) {
+		h ^= (uint64_t) (unsigned char) all[i];
 		h *= 1099511628211ULL;
 	}
 	char buf[32];
@@ -46,8 +49,8 @@ std::string speechId(const std::string& text) {
 }
 
 
-static std::string pathFor(const std::string& text) {
-	return speechDir() + "/" + speechId(text) + ".aiff";
+static std::string pathFor(const std::string& text, const std::string& voice, int rate) {
+	return speechDir() + "/" + speechId(text, voice, rate) + ".aiff";
 }
 
 
@@ -126,7 +129,7 @@ int speechRender(const std::vector<std::string>& lines, const std::string& voice
 	for (size_t i = 0; i < lines.size(); i++) {
 		if (lines[i].empty())
 			continue;
-		const std::string path = pathFor(lines[i]);
+		const std::string path = pathFor(lines[i], voice, rate);
 		if (system::isFile(path))
 			continue;
 		char rateBuf[16];
@@ -143,28 +146,29 @@ int speechRender(const std::vector<std::string>& lines, const std::string& voice
 }
 
 
-float speechLength(const std::string& text) {
+float speechLength(const std::string& text, const std::string& voice, int rate) {
 	if (text.empty())
 		return 0.f;
-	std::map<std::string, float>::const_iterator it = gLength.find(text);
+	const std::string key = speechId(text, voice, rate);
+	std::map<std::string, float>::const_iterator it = gLength.find(key);
 	if (it != gLength.end())
 		return it->second;
-	const std::string path = pathFor(text);
+	const std::string path = pathFor(text, voice, rate);
 	const float seconds = system::isFile(path) ? measure(path) : 0.f;
-	gLength[text] = seconds;
+	gLength[key] = seconds;
 	return seconds;
 }
 
 
-float speechPlay(const std::string& text) {
+float speechPlay(const std::string& text, const std::string& voice, int rate) {
 	speechSilence();
-	const float seconds = speechLength(text);
+	const float seconds = speechLength(text, voice, rate);
 	if (seconds <= 0.f)
 		return 0.f;
 
 	// NOTHING WAITS ON THE PROCESS. The length is already known, so the runner works to that and
 	// the frame is never blocked by a program starting.
-	const std::string path = pathFor(text);
+	const std::string path = pathFor(text, voice, rate);
 	const char* argv[] = {"afplay", path.c_str(), NULL};
 	pid_t pid = 0;
 	if (::posix_spawnp(&pid, argv[0], NULL, NULL, (char* const*) argv, environ) != 0)

@@ -67,7 +67,10 @@ struct Script {
 	/** The voice the narration is rendered in, and how fast it speaks. Declared beside the
 	words it will speak, because it is the same decision. */
 	std::string voice = "Karen (Premium)";
-	int rate = 175;          /**< words per minute */
+	/** A TENTH FASTER THAN A PLAIN READING. Speech rendered at a conversational rate sounds
+	slow against a demonstration, where the picture is already moving; a tenth over is brisk
+	without being hurried, and nothing is ever time-stretched to reach it. */
+	int rate = 193;          /**< words per minute */
 	std::vector<Step> steps;
 
 	/** Empty when the file parsed. Anything else is what is wrong with it, with a line

@@ -810,7 +810,7 @@ void Runner::begin(int i) {
 		card()->show(s.note, region);
 		if (speak) {
 			duckDown();
-			spoken = speechPlay(s.note);
+			spoken = speechPlay(s.note, voice, voiceRate);
 		}
 	}
 	expand(s);

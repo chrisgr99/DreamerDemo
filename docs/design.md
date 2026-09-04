@@ -147,7 +147,9 @@ Rendering happens when a script is **loaded**, not when it is run, so Run is alw
 
 The duration is the point. A note holds for as long as its own sentence takes, and nothing is ever time-stretched: speech sets the floor and the rate multiplier squeezes only the silences around it. That number cannot be known without rendering first. Rendering also makes a second take of a script identical to the first, which speaking live would not.
 
-Keying by a hash of the text means re-wording one note re-renders one file, and a script whose wording has not changed loads instantly. It also removes the failure that a separate rendering step invites, where a note is reworded, the render is forgotten, and the take speaks the old sentence with nothing on screen to say so.
+The key is a hash of the words, **the voice and the speed** — all three, because all three change what comes out of the loudspeaker. Hashing the words alone meant that changing the voice or the rate re-rendered nothing at all, since every line was already there, and the demo went on speaking in the old voice with no sign of why. So re-wording one note re-renders one file, changing the voice re-renders the script, and a script whose wording has not changed loads instantly.
+
+The default rate is a tenth faster than a plain reading. Speech at a conversational pace sounds slow against a demonstration, where the picture is already moving; a tenth over is brisk without being hurried, and nothing is ever time-stretched to reach it. It also removes the failure that a separate rendering step invites, where a note is reworded, the render is forgotten, and the take speaks the old sentence with nothing on screen to say so.
 
 A script is therefore self-contained: a markdown file and the plugin, with the audio a cache beside it that can be deleted at any time.
 

@@ -30,9 +30,12 @@ namespace demo {
 safe to delete — anything missing is rendered again the next time a script is loaded. */
 std::string speechDir();
 
-/** The name a line of prose renders to. A hash of the text, so re-wording one note re-renders
-one file and a script whose words have not changed loads at once. */
-std::string speechId(const std::string& text);
+/** The name a line of prose renders to: a hash of the words, the voice and the speed.
+
+ALL THREE, because all three change what comes out of the loudspeaker. Hashing the words alone
+meant that changing the voice or the rate re-rendered nothing at all — every line was already
+"there" — and the demo went on speaking in the old voice with no sign of why. */
+std::string speechId(const std::string& text, const std::string& voice, int rate);
 
 /** Renders anything in these lines that has no audio yet, in the named voice.
 
@@ -46,11 +49,11 @@ bool speechVoiceExists(const std::string& voice);
 
 /** How long a line lasts, in seconds. Nought when it has not been rendered — a note with no
 audio holds for the script's own `hold` instead. */
-float speechLength(const std::string& text);
+float speechLength(const std::string& text, const std::string& voice, int rate);
 
 /** Speaks it, and returns how long it will take. Nothing waits on the process: the length is
 already known, and the runner works to that. */
-float speechPlay(const std::string& text);
+float speechPlay(const std::string& text, const std::string& voice, int rate);
 
 /** Stops whatever is speaking. A demo that stops should stop talking. */
 void speechSilence();
