@@ -157,7 +157,9 @@ A note's hold is then whichever is longer: the number the script gave it, or how
 
 One recorded audio track means the balance cannot be fixed afterwards, so the runner sets it while it plays.
 
-A script names the patch's master level in its header, and what it should fall to. The runner pulls that parameter down as a line begins and puts it back the moment the voice stops rather than at the end of the step — a note holds for as long as its sentence and often longer, and the patch should be at full level for the remainder rather than under a voice that has finished. It is a parameter like any other, so this needs no mechanism beyond the one that performs a `set`.
+A script names the patch's master level in its header, and what it should fall to. **Where that level rests is captured once, when the run starts** — not each time the voice begins. Capturing it per line meant a duck landing on an already-ducked value took that as the resting level: multiply a level by a third a few times and it reaches silence, with nothing left that knows what to put back. Once per run cannot compound, one restore puts it right however many lines were spoken, and it is put back unconditionally rather than only when the runner believes it is down — a level left low is the one failure a viewer cannot diagnose, because the patch simply makes no sound and nothing on screen says why. A master already at the bottom is not ducked at all.
+
+The runner pulls that parameter down as a line begins and puts it back the moment the voice stops rather than at the end of the step — a note holds for as long as its sentence and often longer, and the patch should be at full level for the remainder rather than under a voice that has finished. It is a parameter like any other, so this needs no mechanism beyond the one that performs a `set`.
 
 Where a patch has no obvious master, the header may name any parameter, or none, in which case nothing is ducked.
 

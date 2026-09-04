@@ -200,9 +200,15 @@ private:
 	void camTo(math::Rect bound, float seconds);
 	void camTick();
 
-	/** What the master was before the narration pulled it down, and whether it is down. */
+	/** WHERE THE MASTER RESTS, captured once when a run starts rather than each time the voice
+	begins. Capturing it per line meant a duck landing on an already-ducked value took THAT as
+	the resting level: multiply a level by a third a few times and it reaches silence, with
+	nothing left that knows what to put back. Once per run cannot compound, and one restore puts
+	it right however many lines were spoken. */
+	bool haveRest = false;
+	float masterRest = 0.f;
 	bool ducked = false;
-	float duckedFrom = 0.f;
+	void duckCapture();
 	void duckDown();
 	void duckUp();
 

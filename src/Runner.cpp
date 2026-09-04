@@ -197,25 +197,44 @@ int Runner::render() {
 and computer audio together — so there is no balance to fix afterwards and it has to be right
 while it plays. The parameter named in the header is moved like any other, so nothing here needs
 a mechanism the runner does not already have. */
-void Runner::duckDown() {
-	if (ducked || master.empty())
+void Runner::duckCapture() {
+	haveRest = false;
+	ducked = false;
+	if (master.empty())
 		return;
 	const Target t = stage.find(master);
 	if (!t.ok || t.paramId < 0)
 		return;
-	duckedFrom = gParamUnit(t);
-	gSetParam(t, duckedFrom * duck);
+	masterRest = gParamUnit(t);
+	// NOTHING TO DUCK. A master already at the bottom would be multiplied by a third and left
+	// there, and the demo would look like the thing that silenced the patch.
+	if (masterRest <= 0.001f)
+		return;
+	haveRest = true;
+}
+
+
+void Runner::duckDown() {
+	if (ducked || !haveRest)
+		return;
+	const Target t = stage.find(master);
+	if (!t.ok || t.paramId < 0)
+		return;
+	gSetParam(t, masterRest * duck);
 	ducked = true;
 }
 
 
 void Runner::duckUp() {
-	if (!ducked)
+	if (!haveRest)
 		return;
 	ducked = false;
+	// PUT BACK UNCONDITIONALLY, not only when this runner believes it is down. A level left low
+	// is the one failure a viewer cannot diagnose: the patch simply makes no sound, and nothing
+	// on screen says why.
 	const Target t = stage.find(master);
 	if (t.ok && t.paramId >= 0)
-		gSetParam(t, duckedFrom);
+		gSetParam(t, masterRest);
 }
 
 
@@ -795,6 +814,8 @@ void Runner::run() {
 		}
 	}
 
+	duckCapture();
+
 	running = true;
 	theatre()->running = true;
 	theatre()->live = true;
@@ -811,6 +832,7 @@ void Runner::stop() {
 	// a rack that is no longer doing anything is the one thing a viewer cannot explain.
 	speechSilence();
 	duckUp();
+	haveRest = false;
 	camMoving = false;
 
 	// THE BUTTON GOES BACK UP, whatever else happens. A demo stopped between a button-down and
