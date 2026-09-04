@@ -295,6 +295,7 @@ void Runner::camTick() {
 	app::RackScrollWidget* scroll = APP->scene->rackScroll;
 	if (!scroll) {
 		camMoving = false;
+	camPointTarget.clear();
 		return;
 	}
 	const double now = system::getTime();
@@ -311,6 +312,19 @@ void Runner::camTick() {
 		* std::pow(camZoomTo / std::fmax(0.0001f, camZoomFrom), t);
 	scroll->setZoom(zoom);
 	scroll->setGridOffset(camGridFrom.plus(camGridTo.minus(camGridFrom).mult(t)));
+
+	// The pointer arrives as the view settles. Its destination is asked for again on every
+	// frame, because the module is travelling across the screen while the camera closes on it —
+	// a destination worked out once, before the move, would be where the module used to be.
+	if (!camPointTarget.empty()) {
+		const Target where = stage.find(camPointTarget);
+		if (where.ok) {
+			const math::Vec now2 = where.centre();
+			theatre()->placeAt(camPointFrom.plus(now2.minus(camPointFrom).mult(t)));
+		}
+		if (!camMoving)
+			camPointTarget.clear();
+	}
 }
 
 
@@ -342,6 +356,7 @@ void Runner::instant(const Step& s) {
 				const math::Rect all = viewBound();
 				scroll->setZoom(z0);
 				scroll->setGridOffset(g0);
+				camPointTarget.clear();
 				camTo(all, pacing.perform);
 				break;
 			}
@@ -354,7 +369,9 @@ void Runner::instant(const Step& s) {
 			// takes. A factor above one frames it with less around it.
 			const float f = std::fmax(0.2f, s.value);
 			const math::Vec pad = t.mw->box.size.mult((1.f / f) * 0.5f);
+			camPointFrom = theatre()->at();
 			camTo(t.mw->box.grow(pad), pacing.perform);
+			camPointTarget = s.target;
 			break;
 		}
 
@@ -377,6 +394,7 @@ void Runner::instant(const Step& s) {
 				want.pos = view.pos.plus(math::Vec(s.value * RACK_GRID_WIDTH,
 					s.value2 * RACK_GRID_HEIGHT));
 			}
+			camPointTarget.clear();
 			camTo(want, pacing.perform);
 			break;
 		}

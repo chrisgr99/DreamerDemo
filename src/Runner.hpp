@@ -185,6 +185,17 @@ private:
 	double camStart = 0.0, camEnd = 0.0;
 	float camZoomFrom = 1.f, camZoomTo = 1.f;
 	math::Vec camGridFrom, camGridTo;
+	/** THE POINTER TRAVELS WITH THE CAMERA when the move is a zoom onto something.
+
+	Zooming to a module means "look at this", and the pointer is what says which thing is being
+	looked at — so it walks there over the same seconds, arriving as the view settles. Its
+	destination is recomputed every frame, because the module is moving across the screen while
+	the camera is moving towards it.
+
+	A pan does not do this. Panning is framing, not attention. */
+	std::string camPointTarget;
+	math::Vec camPointFrom;
+
 	/** Aims the camera at a bound in module coordinates, and starts the move. */
 	void camTo(math::Rect bound, float seconds);
 	void camTick();
