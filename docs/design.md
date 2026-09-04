@@ -127,7 +127,7 @@ So a camera step runs on its own clock beside the narration, and the step's pros
 
 Zoom is interpolated geometrically: halfway between one and four is two, not two and a half. A linear ride between two zoom levels rushes at one end and crawls at the other.
 
-Where the view should end up is worked out by asking Rack to put it there, reading what that produced, and restoring what was there — all within one frame, so nothing is drawn in between. `zoomToBound` already knows how to fit a bound to the viewport, and reimplementing that arithmetic would be one more thing to keep in step with the host. Panning is the same call with a bound the size of the view, so the fit produces the zoom it already had and only the offset changes.
+**The view is held as a place and a closeness**, not as Rack's scroll offset. Rack keeps a pixel offset and a zoom, and offers a grid offset measured from an origin constant; neither moves smoothly, because a pixel offset means something different at every zoom and the grid one carries that constant. What a camera has is a point it is looking at and how close it is, and those two are independent — so those are what get interpolated, and the offset is worked out from them on every frame with Rack's own arithmetic: the point times the zoom, less half the viewport. Panning moves the point and leaves the zoom alone.
 
 ## Control resolution
 
