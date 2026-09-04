@@ -51,7 +51,13 @@ The title of the tune is also the way to another one. Pressing it opens the play
 The chord sounding now leaves here as polyphonic volt per octave, one channel to a note. Beside it are the root on its own, and the notes of the key as a scale, for a quantiser.
 
 ## point chart:"MPX note out"
-And this one carries MPX — Modular Polyphonic Expression — a protocol being developed by Dreamer to pass polyphonic expressive notes between modules. It is somewhat like MIDI Polyphonic Expression, and rather more capable: every note on the cable keeps its own pitch, level, duration, pan, bend, pressure and timbre.
+And this one carries MPX, Modular Polyphonic Expression: a protocol Dreamer Development is building to pass music between a family of MPX modules.
+
+## say
+Every note on it keeps its own pitch, level, duration, pan, bend, pressure and timbre — what MIDI Polyphonic Expression does for a keyboard, and rather more of it.
+
+## say
+It carries the harmony as harmony too: the chord named, its root and quality, the key it sits in, how many beats of it are left, and what comes next. A pitch cable can send the notes of a chord. It cannot say which chord they are.
 
 ## unpatch arp:in:"1V/oct"
 
