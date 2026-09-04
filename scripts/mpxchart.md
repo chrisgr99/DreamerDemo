@@ -59,6 +59,9 @@ Every note on it keeps its own pitch, level, duration, pan, bend, pressure and t
 ## say
 It carries the harmony as harmony too: the chord named, its root and quality, the key it sits in, how many beats of it are left, and what comes next. A pitch cable can send the notes of a chord. It cannot say which chord they are.
 
+## say
+That is what lets modules further down the cable apply musical rules to what the chart is playing — reharmonising it, choosing voicings, arpeggiating it in keeping with the changes, or handing it to a polyphonic expressive instrument such as a guitar model, which needs to know the chord and not only the notes.
+
 ## unpatch arp:in:"1V/oct"
 
 ## patch chart:out:"Chord tones" -> arp:in:"1V/oct"
