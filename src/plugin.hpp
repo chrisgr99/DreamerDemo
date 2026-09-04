@@ -47,7 +47,13 @@ Card* card();
 Theatre* theatre();
 
 /** Puts the card and the pointer at the top of the scene, above the transport. Called when a run
-starts, because either may have been added before the transport was opened. */
+starts, because either may have been added before the transport was opened.
+
+ASKED FOR, NOT DONE ON THE SPOT. Reordering the scene means removing and re-adding children, and
+a run starts from inside a button press — that is, while Rack is part way through dispatching
+that very event to the scene's children. Rearranging the list underneath it is how a press on Run
+ends up somewhere else entirely, picking up a cable from a jack behind the window. The work is
+done on the next frame instead, which is soon enough for something nobody can see. */
 void raiseTheatre();
 
 /** Opens the transport, or brings it forward if it is already up. */

@@ -126,6 +126,12 @@ Everything else goes through the event system. Direct calls remain available und
 
 The real mouse is a hazard for the length of a take: if it moves, Rack delivers a hover to whatever it is over and the highlight follows it rather than the synthetic pointer. The overlay swallows real mouse movement while a demo is running.
 
+## Never rearrange the scene while Rack is walking it
+
+A click on the transport arrives in the middle of Rack's own walk of the scene's children, dispatching that event. Anything done from inside a button press that removes or re-adds a child is rearranging that list underneath the walk — and the press then arrives somewhere else entirely, such as a jack behind the window, which picks up a cable instead of starting the demo.
+
+So bringing the pointer and the card to the front is asked for and done on the next frame. And the transport is not brought to the front at all when it is already open: it is visible, which is enough, and the alternative was a whole class of this fault for no gain.
+
 ## The camera
 
 A zoom or a pan is not something the pointer does, and it is not a cut. It eases from where the view is to where it should be, and it starts **as its step's note goes up** rather than after the note has been read — a demo that talks about a module for four seconds and only then brings it into view has described something the viewer cannot see.

@@ -82,7 +82,17 @@ Theatre* theatre() {
 
 /** The card under the pointer, and both over the transport. Re-adding a child is how Rack
 reorders one, and drawing order is the order of the list. */
+static bool gRaiseWanted = false;
+
 void raiseTheatre() {
+	gRaiseWanted = true;
+}
+
+/** Done from a step, never from an event. See the note in plugin.hpp. */
+static void raiseTheatreNow() {
+	if (!gRaiseWanted)
+		return;
+	gRaiseWanted = false;
 	Card* c = card();
 	Theatre* t = theatre();
 	APP->scene->removeChild(c);
@@ -445,6 +455,7 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 	bool wasRunning = false;
 
 	void step() override {
+		raiseTheatreNow();
 		runner.tick();
 
 		// A SCRIPT THAT REACHES ITS LAST STEP HAS STOPPED, not finished with. The rack it built
@@ -772,11 +783,10 @@ void transportStepAside(math::Rect region) {
 
 void transportShow() {
 	if (gTransport) {
-		Transport* window = gTransport;
-		gRaising = true;
-		APP->scene->removeChild(window);
-		APP->scene->addChild(window);
-		gRaising = false;
+		// ALREADY OPEN, AND LEFT WHERE IT IS. Bringing it to the front would mean removing and
+		// re-adding it to the scene, and this runs from a button press — from inside Rack's own
+		// walk of the scene's children. Rearranging that list underneath the walk is how a press
+		// ends up delivered somewhere else. The window is visible; that is enough.
 		raiseTheatre();
 		return;
 	}
