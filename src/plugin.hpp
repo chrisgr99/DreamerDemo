@@ -1,6 +1,8 @@
 #pragma once
 #include <rack.hpp>
 
+#include <string>
+
 using namespace rack;
 
 extern Plugin* pluginInstance;
@@ -33,6 +35,9 @@ A DEMO HAS TO BE ABLE TO CLOSE ONE. A window opened by a module is not a module,
 controls can be addressed by name, and the realistic way to shut one is the cross in its corner
 rather than pressing the button that opened it a second time. */
 widget::Widget* frontWindow();
+
+/** Everything in the scene, named, for when the answer to "no window is open" is not obvious. */
+std::string sceneContents();
 
 /** The narration card and the pointer theatre, created on first use and left in the scene.
 Both are singletons: there is one demo running at a time, by construction. */

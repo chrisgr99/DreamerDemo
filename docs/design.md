@@ -72,6 +72,7 @@ The step vocabulary, following DreamRack's:
     pan <hp> <rows>                move the view by that much
     open <patch file>              load a patch
     add <Plugin/Model> as <name>   add a module and bind a name to it
+    key <name>                     press a key where the pointer is standing
 
 `window` addresses the floating window at the front that belongs to somebody else — a window a module opened, such as the chart's. It has no controls a script could name, because it is not a module, so `window:close` and `window:close-right` reach the corners where a close control lives. Shutting a window by its own cross is what a person does; pressing the button that opened it a second time is not.
 

@@ -51,6 +51,12 @@ is otherwise impossible to argue with; this says what the click was actually off
 std::string gHoveredName();
 void gScroll(math::Vec pos, math::Vec delta);
 
+/** A key, pressed and released, delivered to whatever is under `pos`.
+
+RACK SENDS A KEY TO WHAT THE POINTER IS OVER, or to the selected widget. So closing a window with
+Escape means standing the pointer on it first — which is what a person does anyway. */
+void gKey(math::Vec pos, int key);
+
 /** Put a parameter at a fraction of its own range, without touching the widget. */
 void gSetParam(const Target& t, float unit);
 

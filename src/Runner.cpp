@@ -479,6 +479,38 @@ void Runner::instant(const Step& s) {
 			break;
 		}
 
+		case Step::KEY: {
+			// RACK SENDS A KEY TO WHAT THE POINTER IS OVER. That is why a key step follows one
+			// that put the pointer somewhere: standing on a window and pressing Escape is what a
+			// person does, and it is what the window is listening for.
+			static const struct { const char* name; int key; } NAMES[] = {
+				{"escape", GLFW_KEY_ESCAPE}, {"esc", GLFW_KEY_ESCAPE},
+				{"enter", GLFW_KEY_ENTER}, {"return", GLFW_KEY_ENTER},
+				{"space", GLFW_KEY_SPACE}, {"tab", GLFW_KEY_TAB},
+				{"backspace", GLFW_KEY_BACKSPACE}, {"delete", GLFW_KEY_DELETE},
+				{"left", GLFW_KEY_LEFT}, {"right", GLFW_KEY_RIGHT},
+				{"up", GLFW_KEY_UP}, {"down", GLFW_KEY_DOWN},
+			};
+			int key = 0;
+			std::string want = s.arg;
+			for (size_t i = 0; i < want.size(); i++)
+				want[i] = (char) std::tolower((unsigned char) want[i]);
+			for (size_t i = 0; i < sizeof(NAMES) / sizeof(NAMES[0]); i++) {
+				if (want == NAMES[i].name)
+					key = NAMES[i].key;
+			}
+			if (!key && want.size() == 1 && want[0] >= 'a' && want[0] <= 'z')
+				key = GLFW_KEY_A + (want[0] - 'a');
+			if (!key) {
+				fail("Step " + std::to_string(index + 1) + ": no key called \"" + s.arg + "\".");
+				return;
+			}
+			INFO("DreamerDemo step %d: key %s at (%g,%g), under it: %s", index + 1,
+				want.c_str(), theatre()->at().x, theatre()->at().y, gHoveredName().c_str());
+			gKey(theatre()->at(), key);
+			break;
+		}
+
 		case Step::ADD: {
 			const size_t slash = s.arg.find('/');
 			if (slash == std::string::npos) {
@@ -538,6 +570,7 @@ void Runner::expand(const Step& s) {
 			instant(s);
 			return;
 		}
+		case Step::KEY:
 		case Step::OPEN:
 		case Step::ADD: {
 			Gest g;

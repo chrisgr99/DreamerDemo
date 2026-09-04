@@ -256,6 +256,14 @@ Script scriptLoad(const std::string& path) {
 				s.value = (float) std::atof(w[2].c_str());
 				s.value2 = (float) std::atof(w[3].c_str());
 			}
+			else if (verb == "key") {
+				if (w.size() < 2) {
+					sc.error = "line " + std::to_string(s.line) + ": key needs a key name";
+					return sc;
+				}
+				s.kind = Step::KEY;
+				s.arg = w[1];
+			}
 			else if (verb == "pan") {
 				// "pan chart" centres on a module; "pan 12 -1" moves by that many HP and rows.
 				if (w.size() < 2) {

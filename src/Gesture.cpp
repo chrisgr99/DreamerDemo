@@ -91,6 +91,14 @@ void gScroll(math::Vec pos, math::Vec delta) {
 }
 
 
+void gKey(math::Vec pos, int key) {
+	Injecting guard;
+	APP->event->handleHover(pos, math::Vec(0.f, 0.f));
+	APP->event->handleKey(pos, key, 0, GLFW_PRESS, 0);
+	APP->event->handleKey(pos, key, 0, GLFW_RELEASE, 0);
+}
+
+
 void gSetParam(const Target& t, float unit) {
 	if (!t.module || t.paramId < 0)
 		return;

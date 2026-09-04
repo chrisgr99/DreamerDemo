@@ -55,6 +55,7 @@ struct Step {
 		PAN,          /**< move the view without changing how close it is */
 		OPEN,         /**< load a patch file */
 		ADD,          /**< add a module of model `arg` and bind `target` to it */
+		KEY,          /**< press a key, delivered to whatever the pointer is over */
 	};
 	Kind kind = SAY;
 

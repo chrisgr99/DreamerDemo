@@ -83,7 +83,7 @@ Target Stage::find(const std::string& ref) const {
 	if (name == "window") {
 		widget::Widget* w = frontWindow();
 		if (!w) {
-			t.why = "no window is open";
+			t.why = "no window is open; the scene holds " + sceneContents();
 			return t;
 		}
 		t.widget = w;

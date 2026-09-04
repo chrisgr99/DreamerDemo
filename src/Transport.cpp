@@ -17,6 +17,8 @@ costs a viewer nothing.
 
 #include <osdialog.h>
 
+#include <typeinfo>
+
 #include <GLFW/glfw3.h>
 
 namespace demo {
@@ -708,6 +710,21 @@ widget::Widget* frontWindow() {
 		return w;
 	}
 	return NULL;
+}
+
+
+std::string sceneContents() {
+	std::string out;
+	for (widget::Widget* w : APP->scene->children) {
+		if (!w)
+			continue;
+		char buf[160];
+		std::snprintf(buf, sizeof(buf), "%s%s %gx%g%s%s", out.empty() ? "" : ", ",
+			typeid(*w).name(), w->box.size.x, w->box.size.y,
+			w->visible ? "" : " hidden", w->requestedDelete ? " going" : "");
+		out += buf;
+	}
+	return out;
 }
 
 

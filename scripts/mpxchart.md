@@ -34,8 +34,10 @@ Clicking a section letter chooses that section, and an orange line above its bar
 
 ## wait 2
 
-## press window:close
-A cross at either end of the title bar shuts it.
+## point window
+
+## key escape
+Escape shuts it, from anywhere.
 
 ## zoom out
 
