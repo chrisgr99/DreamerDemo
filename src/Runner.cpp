@@ -730,30 +730,29 @@ void Runner::expand(const Step& s) {
 			down.target = a;
 			gests.push_back(down);
 
-			// DROPPED ON BARE RACK, WHICH IS WHAT DELETES A CABLE. A fixed distance below the
-			// jack lands on another module as often as not, and a cable dropped on a module is
-			// simply not dropped — which is what "the cable is still there" was reporting.
-			// So somewhere genuinely empty is looked for, and the nearest one wins.
+			// JUST OFF THE JACK, WHICH IS ALL IT TAKES.
+			//
+			// A cable goes back on only when it is released over a PORT. Anywhere else lets go
+			// of it — including the module's own panel, a few millimetres from where it came
+			// from. Hunting for bare rack was solving a problem that does not exist, and it
+			// dragged the cable half the screen to do it. Just past the edge of the jack is
+			// where a person flicks one off, and it is very unlikely to be another jack.
 			const math::Vec from = a.centre();
-			// SHORT, AND ONLY AS FAR AS IT HAS TO BE. Pulling a cable half the height of the
-			// screen to get rid of it reads as a struggle; a person flicks it off the jack onto
-			// the nearest bare patch of rack. So the nearest clear spot wins, starting close.
-			static const math::Vec TRIES[10] = {
-				math::Vec(0.f, 70.f), math::Vec(0.f, -70.f),
-				math::Vec(-80.f, 40.f), math::Vec(80.f, 40.f),
-				math::Vec(0.f, 130.f), math::Vec(0.f, -130.f),
-				math::Vec(-170.f, 0.f), math::Vec(170.f, 0.f),
-				math::Vec(0.f, 240.f), math::Vec(0.f, -240.f),
+			const float step = a.rect.size.y * 0.9f + 6.f;
+			static const float WAY[6][2] = {
+				{0.f, 1.f}, {0.f, -1.f}, {-1.f, 0.f}, {1.f, 0.f}, {-0.7f, 0.7f}, {0.7f, 0.7f},
 			};
-			math::Vec away = from.plus(TRIES[0]);
-			for (int k = 0; k < 10; k++) {
-				const math::Vec p = from.plus(TRIES[k]);
+			math::Vec away = from.plus(math::Vec(0.f, step));
+			for (int k = 0; k < 6; k++) {
+				const math::Vec p = from.plus(math::Vec(WAY[k][0] * step, WAY[k][1] * step));
 				if (!onScreen(math::Rect(p, math::Vec(1.f, 1.f))))
 					continue;
-				bool clear = !transportRect().contains(p);
+				bool clear = true;
 				for (app::ModuleWidget* mw : APP->scene->rack->getModules()) {
-					if (sceneRect(mw).contains(p))
-						clear = false;
+					for (app::PortWidget* pw : mw->getPorts()) {
+						if (sceneRect(pw).grow(math::Vec(3.f, 3.f)).contains(p))
+							clear = false;
+					}
 				}
 				if (clear) {
 					away = p;

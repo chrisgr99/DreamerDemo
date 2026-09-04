@@ -50,6 +50,9 @@ The title of the tune is also the way to another one. Pressing it opens the play
 ## point chart:"Chord tones"
 The chord sounding now leaves here as polyphonic volt per octave, one channel to a note. Beside it are the root on its own, and the notes of the key as a scale, for a quantiser.
 
+## point chart:"MPX note out"
+And this one carries MPX — Modular Polyphonic Expression — a protocol being developed by Dreamer to pass polyphonic expressive notes between modules. It is somewhat like MIDI Polyphonic Expression, and rather more capable: every note on the cable keeps its own pitch, level, duration, pan, bend, pressure and timbre.
+
 ## unpatch arp:in:"1V/oct"
 
 ## patch chart:out:"Chord tones" -> arp:in:"1V/oct"
