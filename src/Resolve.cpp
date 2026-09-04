@@ -75,6 +75,43 @@ Target Stage::find(const std::string& ref) const {
 		return t;
 	}
 
+	// A PLACE ON A PANEL, for what a module draws itself. A readout is not a parameter and not a
+	// port, so nothing about it can be addressed by name — yet the title in mpxChart's readout
+	// is the way to another song, and a demo that cannot press it cannot show that. So a target
+	// may name a point on a module's panel as fractions of its width and height:
+	//
+	//     chart@50%,12%
+	//
+	// It is a last resort, and reads like one: a fraction is a guess about a layout that could
+	// change. Where a control has a name, use the name.
+	const size_t at = ref.find('@');
+	if (at != std::string::npos) {
+		const std::string who = ref.substr(0, at);
+		const std::string where = ref.substr(at + 1);
+		const size_t comma = where.find(',');
+		if (comma == std::string::npos) {
+			t.why = "a place on a panel is written name@across,down";
+			return t;
+		}
+		const Target on = find(who);
+		if (!on.ok)
+			return on;
+		const float fx = (float) std::atof(where.substr(0, comma).c_str())
+			/ (where.find('%') != std::string::npos ? 100.f : 1.f);
+		const float fy = (float) std::atof(where.substr(comma + 1).c_str())
+			/ (where.find('%') != std::string::npos ? 100.f : 1.f);
+		t = on;
+		const math::Vec p = on.rect.pos.plus(
+			math::Vec(on.rect.size.x * fx, on.rect.size.y * fy));
+		t.rect = math::Rect(p.minus(math::Vec(6.f, 6.f)), math::Vec(12.f, 12.f));
+		// The widget is the module, so a click landing anywhere on that module counts as
+		// landing on the target: the thing being pressed is whatever the module draws there.
+		t.paramId = -1;
+		t.portId = -1;
+		t.ok = true;
+		return t;
+	}
+
 	const size_t colon = ref.find(':');
 	const std::string name = ref.substr(0, colon);
 	std::string control = (colon == std::string::npos) ? "" : ref.substr(colon + 1);

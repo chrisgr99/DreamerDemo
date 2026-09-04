@@ -11,7 +11,7 @@
 **Pacing** perform 0.7, arrive 0.5, beat 0.4, settle 0.5, hold 0.5
 
 ## zoom chart 1.4
-This is mpxChart. It reads a chord chart — a jazz lead sheet, as a musician would be handed one — and plays the harmony into the rest of the rack. Let's start it.
+This is mpxChart. It loads iReal Pro charts and playlists — jazz lead sheets, as a musician would be handed one — plays them in time, and puts the chord of the moment out as a polyphonic volt per octave cable. Let's start it.
 
 ## press chart:Play
 
@@ -38,10 +38,17 @@ Escape shuts it, from anywhere.
 
 ## key escape
 
+## press chart@50%,12%
+The title of the tune is also the way to another one. Pressing it opens the playlists that have been loaded, and the charts in each of them.
+
+## wait 2
+
+## key escape
+
 ## zoom chart 0.45
 
 ## point chart:"Chord tones"
-Rack has no way to carry a chord as a chord. So the chart also speaks two languages that every rack already understands: the chord's tones as a polyphonic pitch cable, and the notes of the key as a scale.
+The chord sounding now leaves here as polyphonic volt per octave, one channel to a note. Beside it are the root on its own, and the notes of the key as a scale, for a quantiser.
 
 ## unpatch arp:in:"1V/oct"
 
