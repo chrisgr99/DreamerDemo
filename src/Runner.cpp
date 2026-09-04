@@ -947,11 +947,19 @@ void Runner::stop() {
 		buttonDown = false;
 		gRelease(theatre() ? theatre()->at() : math::Vec(), GLFW_MOUSE_BUTTON_LEFT);
 	}
-	// And if one is still hanging — a release that landed somewhere Rack did not accept — it is
-	// taken off the rack rather than left for somebody to notice.
-	for (app::CableWidget* cw : APP->scene->rack->getIncompleteCables()) {
-		APP->scene->rack->removeCable(cw);
-		delete cw;
+	// SOMETHING STILL IN THE HAND. A half-made cable is left when a release lands somewhere Rack
+	// will not take it — and it is also what a plugin carrying a cable for the pointer looks
+	// like, since carrying one means leaving one of its ends unset.
+	//
+	// ESCAPE FIRST, because that is the word for "put down what you are holding" and whoever is
+	// holding it can put it back properly. Deleting it outright would leave that plugin pointing
+	// at freed memory. Only what survives being asked politely is taken off the rack.
+	if (!APP->scene->rack->getIncompleteCables().empty()) {
+		gKey(theatre() ? theatre()->at() : math::Vec(), GLFW_KEY_ESCAPE);
+		for (app::CableWidget* cw : APP->scene->rack->getIncompleteCables()) {
+			APP->scene->rack->removeCable(cw);
+			delete cw;
+		}
 	}
 
 	if (Theatre* t = theatre()) {
