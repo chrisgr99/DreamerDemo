@@ -120,6 +120,8 @@ Through Rack's own event system. `APP->event->handleButton`, `handleHover`, `han
 
 **A click checks what it is about to land on.** A press goes to whatever is topmost at that point, and a window over the rack — the chart's own, a menu, this plugin's transport — is topmost. The press then does something else entirely, or nothing at all, while the demo carries on believing it pressed a button. So before every click the runner asks Rack what it believes is under the pointer, and a control that is covered stops the run and says so rather than being silently missed.
 
+**Nor is a cable's removal.** How far a cable must be dragged before Rack lets go of it, and what counts as somewhere it will accept, is not knowable from a script: the nearest bare rack can be a long way from the jack, and a drop that lands on anything at all puts the cable back. So the pointer shows the pull and the removal is done through the port's own delete, with its undo entry — the same bargain as a value.
+
 **One thing is deliberately not injected: a value.** How far a knob turns for a given movement is the knob's own business — its range, its sensitivity, whether it snaps — so a drag long enough to reach a value on one control overshoots on the next, and neither distance is knowable from a script. A `set` step writes the value through the parameter and lets the pointer show a drag over the top of it. This is the one place where the theatre and the behaviour are different things on purpose, and it is why a `set` can be checked against the value it asked for.
 
 Everything else goes through the event system. Direct calls remain available underneath for anything injection turns out to handle badly.
@@ -181,6 +183,8 @@ A script names the patch's master level in its header, and what it should fall t
 The runner pulls that parameter down as a line begins and puts it back the moment the voice stops rather than at the end of the step — a note holds for as long as its sentence and often longer, and the patch should be at full level for the remainder rather than under a voice that has finished. It is a parameter like any other, so this needs no mechanism beyond the one that performs a `set`.
 
 Where a patch has no obvious master, the header may name any parameter, or none, in which case nothing is ducked.
+
+`Before` is a list of `target = value` pairs put in place at the start of a run, silently and at once — the conditions a script needs rather than anything it shows. Turning off a host feature that would fight the demo is setup, and watching a pointer travel across the screen to do it cost two and a half seconds before the first word was said.
 
 `Duck` is in **decibels**, because that is the only unit in which "duck it a bit" means the same thing on two different faders — a fraction of a parameter's own range says nothing about how much quieter anything got. A fader that displays decibels is asked for its current reading less the duck, which is right whatever curve it uses underneath; anything else is treated as a linear gain and scaled, which is what a level control is even when it does not say so. Ten decibels by default.
 

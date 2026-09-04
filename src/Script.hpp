@@ -71,6 +71,14 @@ struct Script {
 	slow against a demonstration, where the picture is already moving; a tenth over is brisk
 	without being hurried, and nothing is ever time-stretched to reach it. */
 	int rate = 193;          /**< words per minute */
+	/** Parameters put where the script needs them before it starts, silently and at once.
+
+	SETUP IS NOT DEMONSTRATION. Turning off a host feature that would fight the demo is not
+	something a viewer should watch a pointer travel across the screen to do — it cost two and a
+	half seconds before the first word was said. A script states the conditions it needs; the
+	steps are what it shows. */
+	std::vector<std::pair<std::string, float> > before;
+
 	std::vector<Step> steps;
 
 	/** Empty when the file parsed. Anything else is what is wrong with it, with a line

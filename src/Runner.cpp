@@ -920,6 +920,16 @@ void Runner::run() {
 
 	duckCapture();
 
+	// The conditions the script asked for, set before anything is shown.
+	for (size_t i = 0; i < before.size(); i++) {
+		const Target t = stage.find(before[i].first);
+		if (t.ok && t.paramId >= 0)
+			gSetParam(t, before[i].second);
+		else
+			WARN("DreamerDemo: cannot set \"%s\" before the run: %s",
+				before[i].first.c_str(), t.why.c_str());
+	}
+
 	running = true;
 	theatre()->running = true;
 	theatre()->live = true;
@@ -1176,6 +1186,19 @@ void Runner::startGest() {
 			gHover(g.pos, math::Vec());
 			gRelease(g.pos, GLFW_MOUSE_BUTTON_LEFT);
 			buttonDown = false;
+			// A CABLE PULLED OFF IS REMOVED, whether or not the drop was accepted.
+			//
+			// How far a cable must be dragged, and what counts as somewhere Rack will let go of
+			// it, is not knowable from a script — the nearest bare rack can be a long way from
+			// the jack, and a drop that lands on anything at all puts the cable back. The
+			// pointer shows the pull; the removal is done through the port's own delete, with
+			// its undo entry, which is the same bargain as a value being written rather than
+			// dragged into place.
+			if (steps[index].kind == Step::UNPATCH && checkCount > 0
+				&& gCableCount(checkA) >= checkCount) {
+				if (app::PortWidget* port = dynamic_cast<app::PortWidget*>(checkA.widget))
+					port->deleteTopCableAction();
+			}
 			if (g.glow.size.x > 0.f)
 				theatre()->glow(g.glow, 0.9f);
 			enter(PERFORM, PRESS);

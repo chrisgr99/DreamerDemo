@@ -270,6 +270,7 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 		runner.voice = sc.voice;
 		runner.voiceRate = sc.rate;
 		runner.master = sc.master;
+		runner.before = sc.before;
 		runner.duck = sc.duck;
 		theatre()->badges = sc.badges;
 		card()->enabled = sc.captions;

@@ -349,6 +349,23 @@ Script scriptLoad(const std::string& path) {
 			else if (key == "captions") {
 				sc.captions = (value != "off" && value != "no");
 			}
+			else if (key == "before") {
+				for (const std::string& one : split(value, ',')) {
+					const size_t eq = one.find('=');
+					if (eq == std::string::npos)
+						continue;
+					std::string ref = trim(one.substr(0, eq));
+					// Quotes survive the header, since it is not split into words.
+					if (ref.size() > 1 && ref[ref.size() - 1] == '"')
+						ref.erase(ref.size() - 1);
+					const size_t q = ref.find('"');
+					if (q != std::string::npos)
+						ref.erase(q, 1);
+					float v = 0.f;
+					if (readValue(trim(one.substr(eq + 1)), &v))
+						sc.before.push_back(std::make_pair(ref, v));
+				}
+			}
 			else if (key == "master") {
 				sc.master = value;
 			}

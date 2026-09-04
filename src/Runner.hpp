@@ -96,6 +96,9 @@ struct Runner {
 	std::string master;
 	float duck = 10.f;       /**< decibels */
 
+	/** Put where the script needs them at the start of a run, without ceremony. */
+	std::vector<std::pair<std::string, float> > before;
+
 	/** Renders any line of this script that has no audio yet. Called when a script is loaded,
 	not when it is run, because rendering is slow the first time and instant after. */
 	int render();
