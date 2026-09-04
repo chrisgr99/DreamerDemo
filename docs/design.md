@@ -91,6 +91,8 @@ The vocabulary is closed:
 
 It is generated from the step, never authored. An author writes "patch this to that"; the runner expands it into move pointer, button down, move pointer, button up, and the badge names them one at a time. An eighth word is a discussion, not a new string.
 
+**A click is held, not instantaneous.** A press and a release inside one frame are invisible to anything watching a parameter for an edge — and a momentary button is exactly that, rising on the press and falling on the release, so a module stepping once per frame sees it at rest both times and never learns it was pressed. The button goes down when the gesture starts and comes up when it ends, which is also what a real click does.
+
 Two notes on the expansion. Patching in Rack is a held drag from one port to another, not a click at each end, so it expands to a button-down and a button-up with a move between. And a knob is a drag rather than a wheel, so a value change shows as button down, a slow travel, button up — with the badge saying `drag`.
 
 ## The theatre
