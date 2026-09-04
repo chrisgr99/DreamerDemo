@@ -113,6 +113,8 @@ Through Rack's own event system. `APP->event->handleButton`, `handleHover`, `han
 
 **Every step then asserts what it claimed to do.** After a patch step the cable exists between those two ports; after a set the parameter holds that value; after an add the module is on the rack. A click two pixels off a jack does nothing and would otherwise carry on silently to the end of the take, which is the one real objection to driving the interface this way. A failed assertion stops the run and names the step.
 
+**A click checks what it is about to land on.** A press goes to whatever is topmost at that point, and a window over the rack — the chart's own, a menu, this plugin's transport — is topmost. The press then does something else entirely, or nothing at all, while the demo carries on believing it pressed a button. So before every click the runner asks Rack what it believes is under the pointer, and a control that is covered stops the run and says so rather than being silently missed.
+
 **One thing is deliberately not injected: a value.** How far a knob turns for a given movement is the knob's own business — its range, its sensitivity, whether it snaps — so a drag long enough to reach a value on one control overshoots on the next, and neither distance is knowable from a script. A `set` step writes the value through the parameter and lets the pointer show a drag over the top of it. This is the one place where the theatre and the behaviour are different things on purpose, and it is why a `set` can be checked against the value it asked for.
 
 Everything else goes through the event system. Direct calls remain available underneath for anything injection turns out to handle badly.

@@ -56,6 +56,17 @@ void gClickHeld(math::Vec pos, int button) {
 }
 
 
+bool gHoveredIs(widget::Widget* want) {
+	if (!want)
+		return true;
+	for (widget::Widget* w = APP->event->getHoveredWidget(); w; w = w->parent) {
+		if (w == want)
+			return true;
+	}
+	return false;
+}
+
+
 void gScroll(math::Vec pos, math::Vec delta) {
 	Injecting guard;
 	APP->event->handleHover(pos, math::Vec(0.f, 0.f));

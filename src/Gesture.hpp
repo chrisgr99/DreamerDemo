@@ -36,6 +36,15 @@ A press and a release in the same frame are invisible to anything watching a par
 edge, and a momentary button is exactly that — it rises on the press and falls on the release, so
 a module stepping once per frame sees it at rest both times. */
 void gClickHeld(math::Vec pos, int button);
+
+/** Whether the widget Rack believes is under the pointer is this one, or something inside it.
+
+A CLICK CAN LAND ON THE WRONG THING. Injecting a press at a control's position sends it to
+whatever is topmost there, and a window opened over the rack — the chart's own, a menu, this
+plugin's transport — is topmost. The press then does something else entirely, or nothing, and the
+demo carries on believing it pressed a button. Asked before every click, this turns that into a
+failure with a name. */
+bool gHoveredIs(widget::Widget* want);
 void gScroll(math::Vec pos, math::Vec delta);
 
 /** Put a parameter at a fraction of its own range, without touching the widget. */

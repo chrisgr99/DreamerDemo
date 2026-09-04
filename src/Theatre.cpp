@@ -114,8 +114,10 @@ void Theatre::step() {
 	// a hidden cursor is invisible in the most literal way, and if any path ever fails to lower
 	// this flag the pointer is gone for the rest of the session with nothing on screen to say
 	// why. Losing the window is proof enough that the demo is over.
-	if (live && transportRect().size.x <= 0.f)
+	if (transportRect().size.x <= 0.f) {
 		live = false;
+		running = false;
+	}
 
 	// THE REAL CURSOR IS HIDDEN FOR THE LENGTH OF A TAKE, so a recording contains one pointer
 	// rather than two. Rack draws its cursor through the operating system, so this is the only
