@@ -10,14 +10,12 @@
 **Pacing** perform 0.7, arrive 0.5, beat 0.4, settle 0.5, hold 0.5
 
 ## zoom chart 1.4
-This is mpxChart. It reads a chord chart — a jazz lead sheet, as a musician would be handed one — and plays the harmony into the rest of the rack.
-
-## say
-The face shows the tune, the key, which bar is sounding, and the chord under way at this moment.
+This is mpxChart. It reads a chord chart — a jazz lead sheet, as a musician would be handed one — and plays the harmony into the rest of the rack. Let's start it.
 
 ## press chart:Play
 
-## wait 2
+## say
+The face shows the tune, the key, which bar is sounding, and the chord under way at this moment.
 
 ## press chart:Open
 Everything else about the chart is read in a window of its own.

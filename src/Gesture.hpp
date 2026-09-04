@@ -45,6 +45,10 @@ plugin's transport — is topmost. The press then does something else entirely, 
 demo carries on believing it pressed a button. Asked before every click, this turns that into a
 failure with a name. */
 bool gHoveredIs(widget::Widget* want);
+
+/** What Rack believes is under the pointer, named, for the log. A demo that does nothing visible
+is otherwise impossible to argue with; this says what the click was actually offered. */
+std::string gHoveredName();
 void gScroll(math::Vec pos, math::Vec delta);
 
 /** Put a parameter at a fraction of its own range, without touching the widget. */

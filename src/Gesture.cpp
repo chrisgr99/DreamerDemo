@@ -3,6 +3,8 @@
 
 #include <GLFW/glfw3.h>
 
+#include <cstdio>
+#include <typeinfo>
 #include <chrono>
 #include <thread>
 
@@ -53,6 +55,21 @@ void gClickHeld(math::Vec pos, int button) {
 	// This runs only when an author is stepping through a script, never during a take.
 	std::this_thread::sleep_for(std::chrono::milliseconds(40));
 	gRelease(pos, button);
+}
+
+
+std::string gHoveredName() {
+	widget::Widget* w = APP->event->getHoveredWidget();
+	if (!w)
+		return "nothing";
+	std::string out;
+	for (int depth = 0; w && depth < 4; w = w->parent, depth++) {
+		char buf[160];
+		std::snprintf(buf, sizeof(buf), "%s%s(%g,%g %gx%g)", out.empty() ? "" : " in ",
+			typeid(*w).name(), w->box.pos.x, w->box.pos.y, w->box.size.x, w->box.size.y);
+		out += buf;
+	}
+	return out;
 }
 
 

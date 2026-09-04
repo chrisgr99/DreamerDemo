@@ -561,6 +561,8 @@ void Runner::expand(const Step& s) {
 		return;
 	}
 	checkA = a;
+	INFO("DreamerDemo step %d: \"%s\" resolved to (%g,%g %gx%g)", index + 1,
+		s.target.c_str(), a.rect.pos.x, a.rect.pos.y, a.rect.size.x, a.rect.size.y);
 
 	Gest move;
 	move.word = "move pointer";
@@ -1056,6 +1058,8 @@ void Runner::startGest() {
 			if (g.act == Gest::CLICK_HERE)
 				g.pos = theatre()->at();
 			gHover(g.pos, math::Vec());
+			INFO("DreamerDemo step %d: left click at (%g,%g), under it: %s",
+				index + 1, g.pos.x, g.pos.y, gHoveredName().c_str());
 			// WHAT IS ACTUALLY UNDER THE POINTER. A press goes to whatever is topmost at that
 			// point, and a window over the rack is topmost — so the click does something else,
 			// or nothing, while the demo carries on believing it pressed a button.
@@ -1074,6 +1078,8 @@ void Runner::startGest() {
 
 		case Gest::CLICK_R:
 			gHover(g.pos, math::Vec());
+			INFO("DreamerDemo step %d: right click at (%g,%g), under it: %s",
+				index + 1, g.pos.x, g.pos.y, gHoveredName().c_str());
 			if (!gHoveredIs(g.target.widget)) {
 				fail("Step " + std::to_string(index + 1)
 					+ ": something is covering that control, so the click would land on it.");
