@@ -23,7 +23,32 @@ Tempo, when nothing is clocking it. The green figure above the knob is the rate 
 ## press chart:Play
 Play is a transport, not a mute. Nothing advances while it is off, but the harmony keeps being published, so whatever is downstream still knows the chord you stopped on.
 
-## wait 6
+## wait 5
+
+## press chart:Open
+This button opens the chart itself.
+
+## wait 2
+
+## say
+Four bars to a line, always, so the barlines run straight down the page, and a section always starts a fresh line — the way a copyist would write it.
+
+## wait 3
+
+## say
+The whole window is one control. Drag it wider and the chords, the marks and the spacing all grow together, because every one of them is a fraction of the width of a bar.
+
+## wait 3
+
+## say
+The measure playing is filled in as it goes. Clicking a section letter chooses that section — every occurrence of it, which is what a musician means by "just the A section".
+
+## wait 3
+
+## press chart:Open
+Pressing the same button again shuts it.
+
+## wait 1
 
 ## zoom out
 
@@ -35,15 +60,7 @@ Rack has no way to carry a chord as a chord. So the chart also speaks two langua
 ## patch chart:out:"Chord tones" -> arp:in:"1V/oct"
 Into an ordinary arpeggiator, which knows nothing about any of this. It sees four voltages and plays them in turn, and the chart changes them underneath it as the form goes by.
 
-## wait 8
-
-## press chart:Open
-The chart itself opens in a window of its own. Four bars to a line, always, so the barlines run down the page — and the whole thing is one control: drag the window wider and the music grows with it.
-
 ## wait 10
 
 ## press chart:Play
 Stopping leaves the harmony where it stands.
-
-## say
-The measure playing is filled in as it goes, and clicking a section letter chooses that section — every occurrence of it, which is what a musician means by "just the A section".
