@@ -66,9 +66,11 @@ struct Stage {
 rack's zoom applied. Rack's ZoomWidget does the arithmetic; this only names it. */
 math::Rect sceneRect(widget::Widget* w);
 
-/** Whether a rectangle is far enough inside the window to be pointed at. A control scrolled off
-the rack has a position, and it is a lie — pointing at it would send the pointer off the edge of
-the picture and act on whatever happened to be there. */
+/** Whether the point a click would go to is inside the window. A control scrolled off the rack
+has a position, and it is a lie — pointing at it would send the pointer off the edge of the
+picture and act on whatever happened to be there.
+
+THE POINT, not the whole rectangle: a window is allowed to reach towards an edge. */
 bool onScreen(math::Rect r);
 
 

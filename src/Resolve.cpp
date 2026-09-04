@@ -21,11 +21,14 @@ math::Rect sceneRect(widget::Widget* w) {
 
 
 bool onScreen(math::Rect r) {
+	// THE POINT THE POINTER WILL GO TO, not whether the whole thing fits. Demanding that the
+	// entire target lie inside the window is right for a jack and nonsense for a window seven
+	// hundred pixels wide that quite properly reaches towards an edge — which is how a chart
+	// window plainly in view came to be reported as not on the screen.
 	const math::Vec size = APP->scene->box.size;
+	const math::Vec p = r.getCenter();
 	const float m = 8.f;
-	return r.pos.x > m && r.pos.y > m
-		&& r.pos.x + r.size.x < size.x - m
-		&& r.pos.y + r.size.y < size.y - m;
+	return p.x > m && p.y > m && p.x < size.x - m && p.y < size.y - m;
 }
 
 
