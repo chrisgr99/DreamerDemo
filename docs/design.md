@@ -68,6 +68,8 @@ The step vocabulary, following DreamRack's:
     menu <target> <item>           right click, then choose that item
     move <name> <hp> <rows>        drag a module by its panel
     zoom <name> [factor]           frame a module; `zoom out` frames the whole rack
+    pan <name>                     centre on a module without changing how close it is
+    pan <hp> <rows>                move the view by that much
     open <patch file>              load a patch
     add <Plugin/Model> as <name>   add a module and bind a name to it
 
@@ -114,6 +116,16 @@ Through Rack's own event system. `APP->event->handleButton`, `handleHover`, `han
 Everything else goes through the event system. Direct calls remain available underneath for anything injection turns out to handle badly.
 
 The real mouse is a hazard for the length of a take: if it moves, Rack delivers a hover to whatever it is over and the highlight follows it rather than the synthetic pointer. The overlay swallows real mouse movement while a demo is running.
+
+## The camera
+
+A zoom or a pan is not something the pointer does, and it is not a cut. It eases from where the view is to where it should be, and it starts **as its step's note goes up** rather than after the note has been read — a demo that talks about a module for four seconds and only then brings it into view has described something the viewer cannot see.
+
+So a camera step runs on its own clock beside the narration, and the step's prose is what is said while the move happens. Nothing waits for it.
+
+Zoom is interpolated geometrically: halfway between one and four is two, not two and a half. A linear ride between two zoom levels rushes at one end and crawls at the other.
+
+Where the view should end up is worked out by asking Rack to put it there, reading what that produced, and restoring what was there — all within one frame, so nothing is drawn in between. `zoomToBound` already knows how to fit a bound to the viewport, and reimplementing that arithmetic would be one more thing to keep in step with the host. Panning is the same call with a bound the size of the view, so the fit produces the zoom it already had and only the offset changes.
 
 ## Control resolution
 
