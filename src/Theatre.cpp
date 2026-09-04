@@ -85,6 +85,7 @@ void Theatre::glow(math::Rect rect, float seconds) {
 
 
 void Theatre::clear() {
+	live = false;
 	badge.clear();
 	ripples.clear();
 	glowUntil = 0.0;
@@ -113,10 +114,10 @@ void Theatre::step() {
 	// rather than two. Rack draws its cursor through the operating system, so this is the only
 	// way to be rid of it, and it has to be put back the moment the run ends.
 	static bool hidden = false;
-	if (APP->window && APP->window->win && hidden != running) {
+	if (APP->window && APP->window->win && hidden != live) {
 		glfwSetInputMode(APP->window->win, GLFW_CURSOR,
-			running ? GLFW_CURSOR_HIDDEN : GLFW_CURSOR_NORMAL);
-		hidden = running;
+			live ? GLFW_CURSOR_HIDDEN : GLFW_CURSOR_NORMAL);
+		hidden = live;
 	}
 
 	widget::Widget::step();
@@ -127,7 +128,7 @@ void Theatre::onHover(const HoverEvent& e) {
 	// SWALLOWED WHILE RUNNING. The viewer's own mouse is lying wherever they left it; if it so
 	// much as twitches, Rack hovers whatever is under it and lights a control the synthetic
 	// pointer is nowhere near. Then the picture has two opinions about where the pointer is.
-	if (running && !injecting) {
+	if (live && !injecting) {
 		e.consume(this);
 		return;
 	}

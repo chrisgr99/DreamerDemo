@@ -13,6 +13,7 @@ costs a viewer nothing.
 #include "Card.hpp"
 #include "Script.hpp"
 #include "Speech.hpp"
+#include "Picker.hpp"
 
 #include <osdialog.h>
 
@@ -22,16 +23,17 @@ namespace demo {
 
 
 static const float T_TITLE = 22.f;
-static const float T_W = 902.f;
+static const float T_W = 984.f;
 static const float T_H = 76.f;
 static const float BTN_H = 30.f;
 static const float BTN_Y = T_TITLE + 12.f;
 static const float BTN_GAP = 8.f;
 static const float BTN_PAD = 12.f;
 
-enum Button { B_SCRIPT, B_RUN, B_RESTART, B_BACK, B_STEP, B_RATE, B_VOICE, B_BADGES,
-	B_CAPTIONS, B_COUNT };
-static const float BTN_W[B_COUNT] = {224.f, 74.f, 86.f, 62.f, 62.f, 92.f, 66.f, 78.f, 92.f};
+enum Button { B_SCRIPT, B_RELOAD, B_RUN, B_RESTART, B_BACK, B_STEP, B_RATE, B_VOICE,
+	B_BADGES, B_CAPTIONS, B_COUNT };
+static const float BTN_W[B_COUNT] =
+	{224.f, 74.f, 74.f, 86.f, 62.f, 62.f, 92.f, 66.f, 78.f, 92.f};
 
 static const float RATES[4] = {0.75f, 1.0f, 1.5f, 2.0f};
 
@@ -195,7 +197,14 @@ struct Transport : widget::OpaqueWidget {
 
 	Transport() {
 		box.size = math::Vec(T_W, T_H);
-		rebuild();
+		// OPENS ON WHATEVER WAS TOUCHED LAST — the script played most recently, or the one whose
+		// file was edited most recently, whichever of those happened later. There is no state in
+		// which the transport comes up holding nothing while scripts exist.
+		const std::string want = pickerRemembered();
+		if (!want.empty())
+			loadScript(want);
+		if (scriptPath.empty())
+			rebuild();
 	}
 
 	/** The script that is loaded, if one is. Empty means the self test, which is built from the
@@ -243,6 +252,7 @@ struct Transport : widget::OpaqueWidget {
 		theatre()->badges = sc.badges;
 		card()->enabled = sc.captions;
 		stopped = false;
+		pickerRemember(path);
 		renderVoice();
 	}
 
@@ -258,41 +268,19 @@ struct Transport : widget::OpaqueWidget {
 			INFO("DreamerDemo: rendered %d lines in %s", made, runner.voice.c_str());
 	}
 
-	/** THE SCRIPTS THERE ARE, plus the things an author does with them. A list rather than a file
-	dialog, because the folder is where scripts live and choosing one should be one press and one
-	row. */
+	/** THE LIST OF SCRIPTS, dropped out of the field that names the current one. Every script
+	is in it, so there is nothing left for a menu of commands to do: opening a file by hand was
+	only ever a way round a list that did not show them all. */
 	void chooseScript() {
-		ui::Menu* menu = createMenu();
-		menu->addChild(createMenuLabel("Scripts, most recently edited first"));
 		const std::vector<std::string> found = scriptList();
-		for (const std::string& path : found) {
-			const std::string name = system::getFilename(path);
-			menu->addChild(createCheckMenuItem(name, "",
-				[=]() { return path == scriptPath; },
-				[=]() { loadScript(path); }));
+		if (found.empty()) {
+			runner.failure = "no scripts in " + scriptDir();
+			return;
 		}
-		if (found.empty())
-			menu->addChild(createMenuLabel("none in " + scriptDir()));
-
-		menu->addChild(new MenuSeparator);
-		menu->addChild(createMenuItem("Reload", "", [=]() {
-			if (!scriptPath.empty())
-				loadScript(scriptPath);
-		}));
-		menu->addChild(createMenuItem("Open a file\u2026", "", [=]() {
-			char* chosen = osdialog_file(OSDIALOG_OPEN, scriptDir().c_str(), NULL, NULL);
-			if (!chosen)
-				return;
-			loadScript(chosen);
-			std::free(chosen);
-		}));
-		menu->addChild(createMenuItem("Self test", "", [=]() {
-			scriptPath.clear();
-			rebuild();
-		}));
-		menu->addChild(createMenuItem("Show the scripts folder", "", []() {
-			system::openDirectory(scriptDir());
-		}));
+		const math::Rect field = buttonRect(B_SCRIPT);
+		Transport* self = this;
+		pickerOpen(math::Rect(box.pos.plus(field.pos), field.size), found, scriptPath,
+			[self](std::string path) { self->loadScript(path); });
 	}
 
 	math::Rect closeLeft() {
@@ -320,6 +308,7 @@ struct Transport : widget::OpaqueWidget {
 			case B_BACK: return "Back";
 			case B_STEP: return "Step";
 			// Lit when on, so the label is the name of the thing rather than its state.
+			case B_RELOAD: return "Reload";
 			case B_VOICE: return "Voice";
 			case B_BADGES: return "Badges";
 			case B_CAPTIONS: return "Captions";
@@ -343,6 +332,10 @@ struct Transport : widget::OpaqueWidget {
 		switch (i) {
 			case B_SCRIPT:
 				chooseScript();
+				break;
+			case B_RELOAD:
+				if (!scriptPath.empty())
+					loadScript(scriptPath);
 				break;
 			case B_RUN:
 				if (runner.isRunning()) {
@@ -463,6 +456,9 @@ struct Transport : widget::OpaqueWidget {
 		// stopped on a step. It goes away, and the real cursor comes back, only when the demo
 		// has been put back.
 		theatre()->running = runner.isRunning() || stopped;
+		// LIVE ONLY WHILE IT IS ACTUALLY PERFORMING. Standing stopped on a step still shows the
+		// synthetic pointer, but the real cursor has to come back or there is nothing to press.
+		theatre()->live = runner.isRunning();
 
 		if (APP->window && APP->window->win) {
 			const bool down = glfwGetKey(APP->window->win, GLFW_KEY_ESCAPE) == GLFW_PRESS;

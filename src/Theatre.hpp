@@ -23,9 +23,15 @@ extern const char* const GESTURES[7];
 
 
 struct Theatre : widget::Widget {
-	/** True while a demo is running: the real cursor is hidden and real mouse movement is
-	swallowed, so Rack's own hover highlight cannot follow a pointer the viewer cannot see. */
+	/** True while the synthetic pointer is on screen — which includes standing stopped on a
+	step, so an author can see where the demo got to. */
 	bool running = false;
+
+	/** True only while a demo is actually PERFORMING. Hiding the operating system's cursor and
+	swallowing real mouse movement belong here rather than to `running`: a stopped demo leaves
+	its pointer drawn where it finished, and if that also hid the real cursor you would be left
+	with no pointer at all and nothing to press. */
+	bool live = false;
 	/** Set for the moment a gesture is injected into Rack's event system, so the injected hover
 	passes through this widget instead of being eaten by it. Phase two uses it. */
 	bool injecting = false;

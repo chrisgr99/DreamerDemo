@@ -671,6 +671,7 @@ void Runner::run() {
 
 	running = true;
 	theatre()->running = true;
+	theatre()->live = true;
 	raiseTheatre();
 	if (phase == IDLE)
 		begin(index);
@@ -701,7 +702,8 @@ void Runner::stop() {
 	}
 
 	if (Theatre* t = theatre()) {
-		t->running = false;
+		// The pointer stays drawn where it finished; only the performance ends. clear() puts
+		// the operating system's cursor back.
 		t->clear();
 	}
 }
