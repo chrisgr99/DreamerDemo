@@ -707,8 +707,11 @@ widget::Widget* frontWindow() {
 		// A window rather than a stray layer: big enough to have a frame and a title.
 		if (w->box.size.x < 120.f || w->box.size.y < 80.f)
 			continue;
+		INFO("DreamerDemo: the window at the front is %s (%g,%g %gx%g)", typeid(*w).name(),
+			w->box.pos.x, w->box.pos.y, w->box.size.x, w->box.size.y);
 		return w;
 	}
+	INFO("DreamerDemo: no window at the front; the scene holds %s", sceneContents().c_str());
 	return NULL;
 }
 

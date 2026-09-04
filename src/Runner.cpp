@@ -265,6 +265,9 @@ void Runner::enter(Phase p, float seconds) {
 
 void Runner::fail(const std::string& why) {
 	failure = why;
+	// TO THE LOG AS WELL AS THE SCREEN. The card is gone as soon as the next thing happens, and
+	// the log is the only account of a run that survives it.
+	WARN("DreamerDemo: %s", why.c_str());
 	// SHOWN WHETHER OR NOT CAPTIONS ARE ON, and without turning them on. Scripts are normally
 	// run with captions off because the speech carries the words, so a failure written on the
 	// ordinary card is a failure nobody is told about.
