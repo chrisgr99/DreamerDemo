@@ -43,14 +43,17 @@ would be moved out of the way every time. */
 static math::Vec gWhere = math::Vec(-1.f, -1.f);
 
 
-/** True only while the window is being closed BY SOMEBODY. A remove event says nothing about
-why: it fires when you press the cross, and it fires again when Rack exits and destroys the whole
-scene. Restoring the session means loading a patch file, and doing that inside the application's
-own teardown reaches a patch manager that is already half gone — which is a crash at quit, and a
-patch quietly replaced on the way out.
+/** True from the moment somebody asks for the window to close until it actually goes.
 
-So the session is handed back only on a close somebody asked for. On exit the rack is left as it
-stands, and the patch history is what gets it back. */
+A remove event says nothing about WHY it fired: it fires when you press the cross, and again when
+Rack exits and destroys the whole scene. Everything worth doing on a close — stopping the run,
+handing the patch back, putting the cursor back — reaches into the application, and doing any of
+that during Rack's own teardown reads objects that have already been destroyed.
+
+SET AND LEFT SET, because requestDelete does not remove anything: Rack takes the widget away
+later, in its own step, and a flag raised and lowered around the request is already down by then.
+That is how a window closed with Escape came to be treated as an application exiting, which left
+the run going, the patch unrestored and the cursor hidden with nothing left to unhide it. */
 static bool gClosing = false;
 
 
@@ -401,7 +404,6 @@ struct Transport : widget::OpaqueWidget {
 			if (closeLeft().contains(e.pos) || closeRight().contains(e.pos)) {
 				gClosing = true;
 				requestDelete();
-				gClosing = false;
 				e.consume(this);
 				e.stopPropagating();
 				return;
@@ -475,7 +477,6 @@ struct Transport : widget::OpaqueWidget {
 				if (!menuUp) {
 					gClosing = true;
 					requestDelete();
-					gClosing = false;
 					return;
 				}
 			}
@@ -489,7 +490,6 @@ struct Transport : widget::OpaqueWidget {
 			e.stopPropagating();
 			gClosing = true;
 			requestDelete();
-			gClosing = false;
 			return;
 		}
 		OpaqueWidget::onHoverKey(e);
@@ -681,6 +681,7 @@ void Transport::onRemove(const RemoveEvent& e) {
 		}
 		if (gTransport == this)
 			gTransport = NULL;
+		gClosing = false;
 	}
 	OpaqueWidget::onRemove(e);
 }
