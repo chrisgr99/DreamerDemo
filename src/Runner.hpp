@@ -52,6 +52,7 @@ struct Step {
 		MENU,         /**< right-click, then choose `arg` from the menu that appears */
 		MOVE_MODULE,  /**< drag a module by its panel, `value` HP across and `value2` rows down */
 		ZOOM,         /**< frame a module, or the whole rack when `target` is empty */
+		PAN,          /**< move the view without changing how close it is */
 		OPEN,         /**< load a patch file */
 		ADD,          /**< add a module of model `arg` and bind `target` to it */
 	};
@@ -169,6 +170,24 @@ private:
 
 	Target checkA, checkB;
 	int checkCount = 0;
+
+	/** THE CAMERA, which runs on its own clock rather than as a gesture.
+
+	A view change is not something the pointer does, and it should happen WHILE the sentence
+	about it is being read rather than after — a demo that talks about a module for four seconds
+	and only then brings it into view has described something the viewer cannot see. So a zoom or
+	a pan starts as its step's note goes up and eases from where the view is to where it should
+	be, over the same clock as everything else.
+
+	Zoom is interpolated geometrically. Halfway between one and four is two, not two and a half:
+	a linear ride between two zoom levels rushes at one end and crawls at the other. */
+	bool camMoving = false;
+	double camStart = 0.0, camEnd = 0.0;
+	float camZoomFrom = 1.f, camZoomTo = 1.f;
+	math::Vec camGridFrom, camGridTo;
+	/** Aims the camera at a bound in module coordinates, and starts the move. */
+	void camTo(math::Rect bound, float seconds);
+	void camTick();
 
 	/** What the master was before the narration pulled it down, and whether it is down. */
 	bool ducked = false;

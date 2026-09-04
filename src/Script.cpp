@@ -256,6 +256,23 @@ Script scriptLoad(const std::string& path) {
 				s.value = (float) std::atof(w[2].c_str());
 				s.value2 = (float) std::atof(w[3].c_str());
 			}
+			else if (verb == "pan") {
+				// "pan chart" centres on a module; "pan 12 -1" moves by that many HP and rows.
+				if (w.size() < 2) {
+					sc.error = "line " + std::to_string(s.line)
+						+ ": pan needs a module, or an HP and a row count";
+					return sc;
+				}
+				s.kind = Step::PAN;
+				if (w.size() >= 3 && (std::isdigit((unsigned char) w[1][0])
+					|| w[1][0] == '-' || w[1][0] == '+')) {
+					s.value = (float) std::atof(w[1].c_str());
+					s.value2 = (float) std::atof(w[2].c_str());
+				}
+				else {
+					s.target = w[1];
+				}
+			}
 			else if (verb == "zoom") {
 				s.kind = Step::ZOOM;
 				if (w.size() >= 2 && w[1] != "out") {

@@ -9,10 +9,10 @@
 **Duck** 35%
 **Pacing** perform 1.2, arrive 1.0, beat 0.7, settle 0.7, hold 2.4
 
-## say
+## zoom chart 1.4
 This is mpxChart. It reads a chord chart — a jazz lead sheet, as a musician would be handed one — and plays the harmony into the rest of the rack.
 
-## zoom chart 1.5
+## point chart
 The face shows the tune, the key, which bar is sounding, and the chord under way at this moment. Everything else about the chart is read in a window of its own.
 
 ## point chart:Tempo

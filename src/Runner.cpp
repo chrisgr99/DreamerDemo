@@ -258,13 +258,91 @@ static math::Rect regionFor(const Stage& stage, const std::vector<Step>& steps, 
 }
 
 
+/** WHERE THE VIEW IS AIMED, worked out by asking Rack to aim it and then putting it back.
+
+zoomToBound already knows how to fit a bound to the viewport, and reimplementing that arithmetic
+would be one more thing to keep in step with the host. So the target is measured by applying it,
+reading what it produced, and restoring what was there — all inside one frame, so nothing is
+drawn in between. */
+void Runner::camTo(math::Rect bound, float seconds) {
+	app::RackScrollWidget* scroll = APP->scene->rackScroll;
+	if (!scroll)
+		return;
+
+	const float zoom0 = scroll->getZoom();
+	const math::Vec grid0 = scroll->getGridOffset();
+
+	scroll->zoomToBound(bound);
+	const float zoom1 = scroll->getZoom();
+	const math::Vec grid1 = scroll->getGridOffset();
+
+	scroll->setZoom(zoom0);
+	scroll->setGridOffset(grid0);
+
+	camZoomFrom = zoom0;
+	camZoomTo = zoom1;
+	camGridFrom = grid0;
+	camGridTo = grid1;
+	camStart = system::getTime();
+	camEnd = camStart + std::fmax(0.05f, seconds) / std::fmax(0.1f, rate);
+	camMoving = true;
+}
+
+
+void Runner::camTick() {
+	if (!camMoving)
+		return;
+	app::RackScrollWidget* scroll = APP->scene->rackScroll;
+	if (!scroll) {
+		camMoving = false;
+		return;
+	}
+	const double now = system::getTime();
+	float t = (float) ((now - camStart) / std::fmax(0.001, camEnd - camStart));
+	if (t >= 1.f) {
+		t = 1.f;
+		camMoving = false;
+	}
+	// Eased at both ends, so the move starts and stops like a camera rather than a jump cut.
+	t = t * t * (3.f - 2.f * t);
+
+	// GEOMETRIC IN ZOOM. Halfway between one and four is two, not two and a half.
+	const float zoom = camZoomFrom
+		* std::pow(camZoomTo / std::fmax(0.0001f, camZoomFrom), t);
+	scroll->setZoom(zoom);
+	scroll->setGridOffset(camGridFrom.plus(camGridTo.minus(camGridFrom).mult(t)));
+}
+
+
+/** The rectangle the view is showing now, in module coordinates. */
+static math::Rect viewBound() {
+	app::RackScrollWidget* scroll = APP->scene->rackScroll;
+	if (!scroll)
+		return math::Rect();
+	const float zoom = std::fmax(0.0001f, scroll->getZoom());
+	const math::Vec grid = scroll->getGridOffset();
+	return math::Rect(
+		math::Vec(grid.x * RACK_GRID_WIDTH, grid.y * RACK_GRID_HEIGHT),
+		scroll->box.size.div(zoom));
+}
+
+
 void Runner::instant(const Step& s) {
 	// Steps with no pointer in them. They happen at once, and the note beside them is what tells
 	// the viewer that something has changed.
 	switch (s.kind) {
 		case Step::ZOOM: {
 			if (s.target.empty()) {
-				APP->scene->rackScroll->zoomToModules();
+				// The whole rack. Measured the same way as any other target so that it eases
+				// there rather than cutting.
+				app::RackScrollWidget* scroll = APP->scene->rackScroll;
+				const float z0 = scroll->getZoom();
+				const math::Vec g0 = scroll->getGridOffset();
+				scroll->zoomToModules();
+				const math::Rect all = viewBound();
+				scroll->setZoom(z0);
+				scroll->setGridOffset(g0);
+				camTo(all, pacing.perform);
 				break;
 			}
 			const Target t = stage.find(s.target);
@@ -272,11 +350,34 @@ void Runner::instant(const Step& s) {
 				fail("Step " + std::to_string(index + 1) + ": " + t.why + ".");
 				return;
 			}
-			// The module's own box is already in rack coordinates, which is what zoomToBound
+			// The module's own box is already in rack coordinates, which is what the camera
 			// takes. A factor above one frames it with less around it.
 			const float f = std::fmax(0.2f, s.value);
 			const math::Vec pad = t.mw->box.size.mult((1.f / f) * 0.5f);
-			APP->scene->rackScroll->zoomToBound(t.mw->box.grow(pad));
+			camTo(t.mw->box.grow(pad), pacing.perform);
+			break;
+		}
+
+		case Step::PAN: {
+			// PANNING IS ZOOMING TO A BOUND THE SIZE OF THE VIEW. Keeping the bound the size of
+			// what is already visible means the fit produces the zoom it already had, and only
+			// the offset changes.
+			const math::Rect view = viewBound();
+			math::Rect want = view;
+			if (!s.target.empty()) {
+				const Target t = stage.find(s.target);
+				if (!t.ok || !t.mw) {
+					fail("Step " + std::to_string(index + 1) + ": " + t.why + ".");
+					return;
+				}
+				const math::Vec centre = t.mw->box.pos.plus(t.mw->box.size.div(2.f));
+				want.pos = centre.minus(view.size.div(2.f));
+			}
+			else {
+				want.pos = view.pos.plus(math::Vec(s.value * RACK_GRID_WIDTH,
+					s.value2 * RACK_GRID_HEIGHT));
+			}
+			camTo(want, pacing.perform);
 			break;
 		}
 
@@ -353,6 +454,13 @@ void Runner::expand(const Step& s) {
 		case Step::WAIT:
 			return;
 		case Step::ZOOM:
+		case Step::PAN: {
+			// A VIEW CHANGE IS NOT SOMETHING THE POINTER DOES, and it has to happen WHILE the
+			// sentence about it is being read rather than after it. So it is started here, as
+			// the note goes up, and eases along on its own clock while the step holds.
+			instant(s);
+			return;
+		}
 		case Step::OPEN:
 		case Step::ADD: {
 			Gest g;
@@ -685,6 +793,7 @@ void Runner::stop() {
 	// a rack that is no longer doing anything is the one thing a viewer cannot explain.
 	speechSilence();
 	duckUp();
+	camMoving = false;
 
 	// THE BUTTON GOES BACK UP, whatever else happens. A demo stopped between a button-down and
 	// its button-up leaves Rack believing a drag is still in progress, and the half-made cable
@@ -941,6 +1050,8 @@ void Runner::nextGest() {
 void Runner::tick() {
 	if (!running || phase == IDLE)
 		return;
+
+	camTick();
 
 	const double now = system::getTime();
 
