@@ -209,4 +209,6 @@ Each phase stands alone and is worth having before the next exists.
 2. **Gestures and control resolution** — names to widgets to positions, and the seven gestures injected into Rack's event system, each asserting its result. *Done.*
 3. **The script and the runner** — the markdown parser, the step vocabulary, the pacing, snapshots and stepping. *Done.*
 4. **Narration** — hashing, `say`, `afinfo`, `afplay`, and ducking. *Done.*
-5. **The first video** — a script for mpxChart, which is the module that most needs showing rather than describing.
+5. **The first video** — a script for mpxChart, which is the module that most needs showing rather than describing. *Written; the words are what gets revised now.*
+
+The scripts themselves are kept in `scripts/` in this repository and copied into `DreamerDemo/scripts` in Rack's user folder, which is where the plugin reads them. The repository copy is so a script's wording has a history; the working copy is the one being edited.

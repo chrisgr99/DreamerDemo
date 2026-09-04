@@ -86,7 +86,7 @@ struct Runner {
 	floor and the rate multiplier squeezes only the silences around it, because a sentence played
 	faster is a sentence nobody can follow. */
 	bool speak = true;
-	std::string voice = "Jamie (Premium)";
+	std::string voice = "Karen (Premium)";
 	int voiceRate = 175;
 
 	/** The parameter pulled down while a line is spoken, and what it falls to. One recorded

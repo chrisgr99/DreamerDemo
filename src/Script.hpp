@@ -66,7 +66,7 @@ struct Script {
 
 	/** The voice the narration is rendered in, and how fast it speaks. Declared beside the
 	words it will speak, because it is the same decision. */
-	std::string voice = "Jamie (Premium)";
+	std::string voice = "Karen (Premium)";
 	int rate = 175;          /**< words per minute */
 	std::vector<Step> steps;
 
