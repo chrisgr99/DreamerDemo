@@ -730,10 +730,32 @@ void Runner::expand(const Step& s) {
 			down.target = a;
 			gests.push_back(down);
 
-			// Dropped on bare rack, which is what deletes a cable. Below the port rather than
-			// beside it, because the module's own panel is what is beside it.
-			math::Vec away = a.centre().plus(math::Vec(0.f, 150.f));
-			away.y = std::fmin(away.y, APP->scene->box.size.y - 60.f);
+			// DROPPED ON BARE RACK, WHICH IS WHAT DELETES A CABLE. A fixed distance below the
+			// jack lands on another module as often as not, and a cable dropped on a module is
+			// simply not dropped — which is what "the cable is still there" was reporting.
+			// So somewhere genuinely empty is looked for, and the nearest one wins.
+			const math::Vec from = a.centre();
+			static const math::Vec TRIES[8] = {
+				math::Vec(0.f, 150.f), math::Vec(0.f, -150.f),
+				math::Vec(-220.f, 0.f), math::Vec(220.f, 0.f),
+				math::Vec(0.f, 260.f), math::Vec(0.f, -260.f),
+				math::Vec(-360.f, 0.f), math::Vec(360.f, 0.f),
+			};
+			math::Vec away = from.plus(TRIES[0]);
+			for (int k = 0; k < 8; k++) {
+				const math::Vec p = from.plus(TRIES[k]);
+				if (!onScreen(math::Rect(p, math::Vec(1.f, 1.f))))
+					continue;
+				bool clear = !transportRect().contains(p);
+				for (app::ModuleWidget* mw : APP->scene->rack->getModules()) {
+					if (sceneRect(mw).contains(p))
+						clear = false;
+				}
+				if (clear) {
+					away = p;
+					break;
+				}
+			}
 			Gest drag;
 			drag.word = "drag";
 			drag.act = Gest::DRAG;

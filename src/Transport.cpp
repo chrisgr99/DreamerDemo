@@ -412,6 +412,15 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 	}
 
 	void onButton(const ButtonEvent& e) override {
+		if (e.action == GLFW_PRESS) {
+			int which = -1;
+			for (int i = 0; i < B_COUNT; i++) {
+				if (buttonRect(i).contains(e.pos))
+					which = i;
+			}
+			INFO("DreamerDemo transport: press at (%g,%g) in a box of (%g,%g %gx%g), button %d",
+				e.pos.x, e.pos.y, box.pos.x, box.pos.y, box.size.x, box.size.y, which);
+		}
 		if (e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT) {
 			if (closeLeft().contains(e.pos) || closeRight().contains(e.pos)) {
 				gClosing = true;
@@ -756,6 +765,14 @@ void transportStepAside(math::Rect region) {
 		return;
 	const math::Rect mine(gTransport->box.pos, gTransport->box.size);
 	if (!mine.intersects(region))
+		return;
+
+	// NOT WHILE THE POINTER IS ON IT. A window that jumps out from under your hand as you reach
+	// for a button is wrong on its own account, and here it is worse than untidy: the press then
+	// lands on the rack behind, and over a jack that means picking up a cable instead of
+	// starting the demo. Whatever the step was about to do can be done with the window where it
+	// is; it will move at the next note, when the pointer has gone.
+	if (mine.grow(math::Vec(12.f, 12.f)).contains(APP->scene->getMousePos()))
 		return;
 
 	const math::Vec scene = APP->scene->box.size;
