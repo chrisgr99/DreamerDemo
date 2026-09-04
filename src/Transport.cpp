@@ -724,8 +724,14 @@ widget::Widget* frontWindow() {
 		if (w == (widget::Widget*) APP->scene->rackScroll || w == APP->scene->menuBar
 			|| w == APP->scene->browser)
 			continue;                              // the application's own furniture
-		// A window rather than a stray layer: big enough to have a frame and a title.
+		// A window rather than a stray layer: big enough to have a frame and a title, and not
+		// the size of the whole scene. A LAYER OVER EVERYTHING IS NOT A WINDOW — Clarity puts
+		// one there to catch clicks, and it was being taken for the chart's window, so Escape
+		// went to a layer that had no interest in it.
 		if (w->box.size.x < 120.f || w->box.size.y < 80.f)
+			continue;
+		if (w->box.size.x > APP->scene->box.size.x * 0.95f
+			&& w->box.size.y > APP->scene->box.size.y * 0.95f)
 			continue;
 		INFO("DreamerDemo: the window at the front is %s (%g,%g %gx%g)", typeid(*w).name(),
 			w->box.pos.x, w->box.pos.y, w->box.size.x, w->box.size.y);

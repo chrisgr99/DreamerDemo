@@ -1,6 +1,6 @@
 # mpxChart — playing the changes
 
-**Modules** chart = DreamerMPX/mpxChart, arp = HamptonHarmonics/Arp, audio = Core/AudioInterface2
+**Modules** chart = DreamerMPX/mpxChart, arp = HamptonHarmonics/Arp, audio = Core/AudioInterface2, clarity = DreamerDevelopment/Clarity
 **Voice** Karen (Premium)
 **Rate** 193
 **Badges** off
@@ -8,6 +8,8 @@
 **Master** audio:Level
 **Duck** 10 dB
 **Pacing** perform 0.7, arrive 0.5, beat 0.4, settle 0.5, hold 0.5
+
+## set clarity:"Add and move" 0
 
 ## zoom chart 1.4
 This is mpxChart. It reads a chord chart — a jazz lead sheet, as a musician would be handed one — and plays the harmony into the rest of the rack. Let's start it.

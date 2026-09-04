@@ -735,14 +735,18 @@ void Runner::expand(const Step& s) {
 			// simply not dropped — which is what "the cable is still there" was reporting.
 			// So somewhere genuinely empty is looked for, and the nearest one wins.
 			const math::Vec from = a.centre();
-			static const math::Vec TRIES[8] = {
-				math::Vec(0.f, 150.f), math::Vec(0.f, -150.f),
-				math::Vec(-220.f, 0.f), math::Vec(220.f, 0.f),
-				math::Vec(0.f, 260.f), math::Vec(0.f, -260.f),
-				math::Vec(-360.f, 0.f), math::Vec(360.f, 0.f),
+			// SHORT, AND ONLY AS FAR AS IT HAS TO BE. Pulling a cable half the height of the
+			// screen to get rid of it reads as a struggle; a person flicks it off the jack onto
+			// the nearest bare patch of rack. So the nearest clear spot wins, starting close.
+			static const math::Vec TRIES[10] = {
+				math::Vec(0.f, 70.f), math::Vec(0.f, -70.f),
+				math::Vec(-80.f, 40.f), math::Vec(80.f, 40.f),
+				math::Vec(0.f, 130.f), math::Vec(0.f, -130.f),
+				math::Vec(-170.f, 0.f), math::Vec(170.f, 0.f),
+				math::Vec(0.f, 240.f), math::Vec(0.f, -240.f),
 			};
 			math::Vec away = from.plus(TRIES[0]);
-			for (int k = 0; k < 8; k++) {
+			for (int k = 0; k < 10; k++) {
 				const math::Vec p = from.plus(TRIES[k]);
 				if (!onScreen(math::Rect(p, math::Vec(1.f, 1.f))))
 					continue;
