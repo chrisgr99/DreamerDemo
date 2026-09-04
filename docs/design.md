@@ -126,6 +126,8 @@ Everything else goes through the event system. Direct calls remain available und
 
 The real mouse is a hazard for the length of a take: if it moves, Rack delivers a hover to whatever it is over and the highlight follows it rather than the synthetic pointer. The overlay swallows real mouse movement while a demo is running.
 
+**It is not on screen while a demo runs.** The transport is the author's window, not the viewer's: nobody watching a video should see the thing driving it, and while it was visible the synthetic pointer could walk onto it and drag it about. It is hidden rather than moved, so it draws nothing and receives nothing. Escape still stops a run and hands the patch back, which is the one control a take needs.
+
 ## Never rearrange the scene while Rack is walking it
 
 A click on the transport arrives in the middle of Rack's own walk of the scene's children, dispatching that event. Anything done from inside a button press that removes or re-adds a child is rearranging that list underneath the walk — and the press then arrives somewhere else entirely, such as a jack behind the window, which picks up a cable instead of starting the demo.

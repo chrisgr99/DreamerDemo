@@ -39,7 +39,7 @@ Escape shuts it, from anywhere.
 
 ## key escape
 
-## zoom out
+## zoom chart 0.45
 
 ## point chart:"Chord tones"
 Rack has no way to carry a chord as a chord. So the chart also speaks two languages that every rack already understands: the chord's tones as a polyphonic pitch cable, and the notes of the key as a scale.

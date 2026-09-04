@@ -25,7 +25,7 @@ namespace demo {
 
 
 static const float T_TITLE = 22.f;
-static const float T_W = 984.f;
+static const float T_W = 1054.f;
 static const float T_H = 76.f;
 static const float BTN_H = 30.f;
 static const float BTN_Y = T_TITLE + 12.f;
@@ -33,9 +33,9 @@ static const float BTN_GAP = 8.f;
 static const float BTN_PAD = 12.f;
 
 enum Button { B_SCRIPT, B_RELOAD, B_RUN, B_RESTART, B_BACK, B_STEP, B_RATE, B_VOICE,
-	B_BADGES, B_CAPTIONS, B_COUNT };
+	B_BADGES, B_CAPTIONS, B_HIDE, B_COUNT };
 static const float BTN_W[B_COUNT] =
-	{224.f, 74.f, 74.f, 86.f, 62.f, 62.f, 92.f, 66.f, 78.f, 92.f};
+	{224.f, 74.f, 74.f, 86.f, 62.f, 62.f, 92.f, 66.f, 78.f, 92.f, 62.f};
 
 static const float RATES[4] = {0.75f, 1.0f, 1.5f, 2.0f};
 
@@ -208,6 +208,13 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 	Runner runner;
 	/** Stop is two-stage, and this is which stage the next press is. */
 	bool stopped = false;
+
+	/** OUT OF THE PICTURE WHILE A DEMO RUNS. The transport is the author's, not the viewer's:
+	nobody watching a video should see the thing that is driving it, and while it was on screen
+	the synthetic pointer could walk onto it and drag it about.
+	
+	Escape still stops a run and puts the patch back, which is the one control a take needs. */
+	bool hideWhileRunning = true;
 	math::Vec dragStart;
 
 	Transport() {
@@ -327,6 +334,7 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 			case B_VOICE: return "Voice";
 			case B_BADGES: return "Badges";
 			case B_CAPTIONS: return "Captions";
+			case B_HIDE: return "Hide";
 			default: {
 				char buf[24];
 				std::snprintf(buf, sizeof(buf), "Rate %.2gx", runner.rate);
@@ -398,6 +406,9 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 				break;
 			case B_CAPTIONS:
 				card()->enabled = !card()->enabled;
+				break;
+			case B_HIDE:
+				hideWhileRunning = !hideWhileRunning;
 				break;
 			default: {
 				int k = 0;
@@ -479,6 +490,10 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 		// THE POINTER IS UP FOR AS LONG AS THE DEMO OWNS THE SCREEN, which includes standing
 		// stopped on a step. It goes away, and the real cursor comes back, only when the demo
 		// has been put back.
+		// Hidden, not moved: an invisible widget draws nothing and receives nothing, so the
+		// pointer cannot land on it either.
+		visible = !(hideWhileRunning && runner.isRunning());
+
 		theatre()->running = runner.isRunning() || stopped;
 		// LIVE ONLY WHILE IT IS ACTUALLY PERFORMING. Standing stopped on a step still shows the
 		// synthetic pointer, but the real cursor has to come back or there is nothing to press.
@@ -658,7 +673,8 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 			const bool lit = (i == B_RUN && runner.isRunning())
 				|| (i == B_VOICE && runner.speak)
 				|| (i == B_BADGES && theatre()->badges)
-				|| (i == B_CAPTIONS && card()->enabled);
+				|| (i == B_CAPTIONS && card()->enabled)
+				|| (i == B_HIDE && hideWhileRunning);
 			drawChip(args.vg, buttonRect(i), buttonLabel(i), lit);
 		}
 
@@ -758,7 +774,8 @@ std::string sceneContents() {
 
 
 math::Rect transportRect() {
-	if (!gTransport)
+	// Nothing to keep clear of when it is not on screen.
+	if (!gTransport || !gTransport->visible)
 		return math::Rect();
 	return math::Rect(gTransport->box.pos, gTransport->box.size);
 }
