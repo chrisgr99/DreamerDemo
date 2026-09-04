@@ -32,12 +32,10 @@ The measure being played is filled in as it goes. Clicking any bar sends the pla
 ## say
 Clicking a section letter chooses that section, and an orange line above its bars shows which one is chosen. The chart then plays that section over and over instead of the whole form.
 
-## wait 2
-
 ## point window
+Escape shuts it, from anywhere.
 
 ## key escape
-Escape shuts it, from anywhere.
 
 ## zoom out
 
