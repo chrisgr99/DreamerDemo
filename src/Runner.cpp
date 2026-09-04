@@ -265,6 +265,11 @@ void Runner::enter(Phase p, float seconds) {
 
 void Runner::fail(const std::string& why) {
 	failure = why;
+	// SHOWN WHETHER OR NOT CAPTIONS ARE ON. A script that speaks its narration turns the card
+	// off, and a failure put on a card that is switched off is a failure nobody is told about —
+	// which is worse than no message at all, because the run simply stops and the demo looks
+	// like it did nothing. An error is not narration.
+	card()->enabled = true;
 	card()->show("The demo stopped. " + why, math::Rect());
 	stop();
 }

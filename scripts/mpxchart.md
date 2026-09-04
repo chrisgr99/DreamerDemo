@@ -16,21 +16,23 @@ This is mpxChart. It reads a chord chart — a jazz lead sheet, as a musician wo
 The face shows the tune, the key, which bar is sounding, and the chord under way at this moment.
 
 ## press chart:Play
-Play is a transport, not a mute. Nothing advances while it is off, but the harmony keeps being published, so whatever is downstream still knows the chord you stopped on.
 
-## wait 3
+## wait 2
 
 ## press chart:Open
 Everything else about the chart is read in a window of its own.
 
 ## say
-Four bars to a line, always, so the barlines run straight down the page, and a section always starts a fresh line — the way a copyist would write it.
+Four bars to a line, always, so the barlines run straight down the page, and a section always starts a fresh line.
 
 ## say
 The whole window is one control. Drag it wider and the chords, the marks and the spacing all grow together, because every one of them is a fraction of the width of a bar.
 
 ## say
-The measure playing is filled in as it goes. Clicking a section letter chooses that section, and the chart then plays that section over and over instead of the whole form — every occurrence of the letter, which is what a musician means by "just the A section".
+The measure being played is filled in as it goes. Clicking any bar sends the play head there, so you can jump about the form while it is running.
+
+## say
+Clicking a section letter chooses that section, and an orange line above its bars shows which one is chosen. The chart then plays that section over and over instead of the whole form.
 
 ## wait 2
 
@@ -50,4 +52,4 @@ Into an ordinary arpeggiator, which knows nothing about any of this. It sees fou
 ## wait 8
 
 ## press chart:Play
-Stopping leaves the harmony where it stands.
+Play is a transport, not a mute. Nothing advances now that it is off, but the harmony is still being published, so everything downstream knows the chord you stopped on.
