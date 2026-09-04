@@ -19,6 +19,21 @@ extern const NVGcolor ACCENT;    /**< the click ripple and the glow: where to lo
 /** Rack's own UI face, so a badge over Rack's interface is set in Rack's lettering. */
 std::shared_ptr<window::Font> uiFont();
 
+/** Inherited by every widget this plugin puts in the scene, so the resolver can tell them from
+somebody else's floating window. Without it, "the window at the front" would find the transport,
+or the card, or the list of scripts. */
+struct OurWidget {
+	virtual ~OurWidget() {}
+};
+
+/** The floating window at the front of the scene that belongs to somebody else — a module's own
+window, such as the chart. Nothing, when there is none.
+
+A DEMO HAS TO BE ABLE TO CLOSE ONE. A window opened by a module is not a module, so none of its
+controls can be addressed by name, and the realistic way to shut one is the cross in its corner
+rather than pressing the button that opened it a second time. */
+widget::Widget* frontWindow();
+
 /** The narration card and the pointer theatre, created on first use and left in the scene.
 Both are singletons: there is one demo running at a time, by construction. */
 struct Card;

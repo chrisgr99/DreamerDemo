@@ -76,6 +76,35 @@ Target Stage::find(const std::string& ref) const {
 	const std::string name = ref.substr(0, colon);
 	std::string control = (colon == std::string::npos) ? "" : ref.substr(colon + 1);
 
+	// THE FLOATING WINDOW AT THE FRONT, which no name can be bound to because it is not a
+	// module. A window a module opened has no controls a script could address, and the realistic
+	// way to shut one is its own close cross rather than pressing the button that opened it a
+	// second time — so the corners where a close control lives are addressable.
+	if (name == "window") {
+		widget::Widget* w = frontWindow();
+		if (!w) {
+			t.why = "no window is open";
+			return t;
+		}
+		t.widget = w;
+		t.rect = sceneRect(w);
+		const float corner = 22.f;
+		if (control == "close" || control == "close-left") {
+			t.rect = math::Rect(t.rect.pos, math::Vec(corner, corner));
+		}
+		else if (control == "close-right") {
+			t.rect = math::Rect(
+				math::Vec(t.rect.pos.x + t.rect.size.x - corner, t.rect.pos.y),
+				math::Vec(corner, corner));
+		}
+		else if (!control.empty()) {
+			t.why = "a window has no \"" + control + "\"; try close, or close-right";
+			return t;
+		}
+		t.ok = true;
+		return t;
+	}
+
 	std::map<std::string, int64_t>::const_iterator it = ids.find(name);
 	if (it == ids.end()) {
 		t.why = "no module bound to the name \"" + name + "\"";

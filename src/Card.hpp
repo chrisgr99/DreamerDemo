@@ -15,7 +15,7 @@ while you are reading it is worse than one that briefly overlaps something.
 namespace demo {
 
 
-struct Card : widget::Widget {
+struct Card : widget::Widget, OurWidget {
 	/** WHETHER THE CARD IS SHOWN AT ALL. Experience with the same system in DreamRack was that a
 	demo reads better with the captions and the badges both off and the speech carrying the
 	action: written narration and spoken narration are the same words twice, and the eye stops

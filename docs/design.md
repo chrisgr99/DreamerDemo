@@ -73,6 +73,8 @@ The step vocabulary, following DreamRack's:
     open <patch file>              load a patch
     add <Plugin/Model> as <name>   add a module and bind a name to it
 
+`window` addresses the floating window at the front that belongs to somebody else — a window a module opened, such as the chart's. It has no controls a script could name, because it is not a module, so `window:close` and `window:close-right` reach the corners where a close control lives. Shutting a window by its own cross is what a person does; pressing the button that opened it a second time is not.
+
 A target is `name` for the module itself or `name:control` for one of its controls, where the control is a parameter's or a port's own name. `in:` and `out:` in front of it force the side, and `#3` addresses one by number for a module that names nothing.
 
 Every step carries its own pacing, and the script's defaults supply whatever a step leaves out: how long the pointer takes to travel (`perform`), the pause after it lands (`arrive`), how long the badge is up before the gesture fires (`beat`), the pause after the action (`settle`), and how long a new note stays up before the demo acts on it (`hold`).

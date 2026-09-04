@@ -22,7 +22,7 @@ string — the badge is read at a glance, and a set of words that grows stops be
 extern const char* const GESTURES[7];
 
 
-struct Theatre : widget::Widget {
+struct Theatre : widget::Widget, OurWidget {
 	/** True while the synthetic pointer is on screen — which includes standing stopped on a
 	step, so an author can see where the demo got to. */
 	bool running = false;

@@ -15,7 +15,7 @@ static const float MAX_H = 340.f;
 static const float TEXT = 15.f;
 
 
-struct PickerList : widget::OpaqueWidget {
+struct PickerList : widget::OpaqueWidget, OurWidget {
 	std::vector<std::string> paths;
 	std::string current;
 	std::function<void(std::string)> pick;
@@ -141,7 +141,7 @@ struct PickerList : widget::OpaqueWidget {
 /** A layer over the whole scene, so a press anywhere else closes the list. It is opaque, which
 also stops that press reaching whatever was under it — clicking away from a list should dismiss
 it and nothing more. */
-struct PickerOverlay : widget::OpaqueWidget {
+struct PickerOverlay : widget::OpaqueWidget, OurWidget {
 	PickerList* list = NULL;
 
 	void step() override {

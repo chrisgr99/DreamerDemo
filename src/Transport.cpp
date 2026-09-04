@@ -192,7 +192,7 @@ static std::vector<Step> selfTestScript(Stage& stage) {
 
 // ---------------------------------------------------------------- the window
 
-struct Transport : widget::OpaqueWidget {
+struct Transport : widget::OpaqueWidget, OurWidget {
 	Runner runner;
 	/** Stop is two-stage, and this is which stage the next press is. */
 	bool stopped = false;
@@ -684,6 +684,30 @@ void Transport::onRemove(const RemoveEvent& e) {
 		gClosing = false;
 	}
 	OpaqueWidget::onRemove(e);
+}
+
+
+widget::Widget* frontWindow() {
+	// Frontmost first: drawing order is the order of the list, so the last child is on top.
+	for (size_t k = APP->scene->children.size(); k > 0; k--) {
+		std::list<widget::Widget*>::reverse_iterator it = APP->scene->children.rbegin();
+		std::advance(it, APP->scene->children.size() - k);
+		widget::Widget* w = *it;
+		if (!w || !w->visible || w->requestedDelete)
+			continue;
+		if (dynamic_cast<OurWidget*>(w))
+			continue;                              // the transport, the card, the pointer, a list
+		if (dynamic_cast<ui::MenuOverlay*>(w))
+			continue;                              // a menu is not a window
+		if (w == (widget::Widget*) APP->scene->rackScroll || w == APP->scene->menuBar
+			|| w == APP->scene->browser)
+			continue;                              // the application's own furniture
+		// A window rather than a stray layer: big enough to have a frame and a title.
+		if (w->box.size.x < 120.f || w->box.size.y < 80.f)
+			continue;
+		return w;
+	}
+	return NULL;
 }
 
 
