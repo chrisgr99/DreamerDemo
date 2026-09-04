@@ -55,18 +55,23 @@ The chord output carries the tones of the bar as a polyphonic pitch.
 
 The step vocabulary, following DreamRack's:
 
-    open <patch>                load a patch file
-    add <model> as <name>       add a module and bind a name to it
-    point <name>:<control>      move the pointer, say the note, do nothing
-    press <name>:<control>      click a button or a switch
-    set <name>:<control> <v>    move a knob or a slider to a value
-    menu <name>:<control> <item>  right-click and choose from the menu
-    patch a:b -> c:d            connect two ports
-    unpatch c:d                 remove the cable at a port
-    move <name> <x> <y>         drag a module by its panel
-    zoom <name> [factor]        frame a module; `zoom out` returns to the whole rack
-    say                         nothing happens; the note is the step
-    wait <seconds>              let the patch play
+    say                            nothing happens; the prose is the step
+    wait <seconds>                 let the patch play
+    point <target>                 go there and say the note; touch nothing
+    press <target>                 left click it
+    click <target>                 the same word, for a control that is not a button
+    right <target>                 right click it, which opens its menu
+    set <target> <value>           a fraction, a percentage, or a word
+    scroll <target> [up|down]
+    patch <target> -> <target>     either way round
+    unpatch <target>               pull the cable off and drop it
+    menu <target> <item>           right click, then choose that item
+    move <name> <hp> <rows>        drag a module by its panel
+    zoom <name> [factor]           frame a module; `zoom out` frames the whole rack
+    open <patch file>              load a patch
+    add <Plugin/Model> as <name>   add a module and bind a name to it
+
+A target is `name` for the module itself or `name:control` for one of its controls, where the control is a parameter's or a port's own name. `in:` and `out:` in front of it force the side, and `#3` addresses one by number for a module that names nothing.
 
 Every step carries its own pacing, and the script's defaults supply whatever a step leaves out: how long the pointer takes to travel (`perform`), the pause after it lands (`arrive`), how long the badge is up before the gesture fires (`beat`), the pause after the action (`settle`), and how long a new note stays up before the demo acts on it (`hold`).
 
@@ -74,7 +79,11 @@ A single rate multiplier scales all of it, for re-timing a finished script. It i
 
 ## Gestures and the badge
 
-The badge is a small dark chip beside the pointer naming the gesture in the host's own terms. The vocabulary is closed:
+The badge is a dark chip beside the pointer naming the gesture in the host's own terms. It is set at caption size rather than tooltip size — it is read at a glance while the pointer is the thing being watched, from across a room or through a magnified view — and everything about it is a fraction of that one number.
+
+It can be turned off for a whole script. Once the narration speaks a gesture as well as writing it, the badge is a caption repeating the voice. The pacing does not change either way, so the same script runs to the same length with the badge up or down and the two can be judged against each other.
+
+The vocabulary is closed:
 
     move pointer   left click   right click   button down   drag   button up   scroll wheel
 
@@ -90,13 +99,19 @@ The card is one text place floating over the rack rather than docked beside it, 
 
 A note stays until the next note replaces it, so one note covers however many steps follow it.
 
+**The card can be turned off, and often will be.** Experiment with the same system in DreamRack settled it: a demo reads better with the captions and the badges both down and the speech carrying the action. Written and spoken narration are the same words twice, and the eye leaves the thing being demonstrated in order to read. The card stays in the design because a demo without sound needs it, and because it is what an author reads while stepping through a script in silence.
+
+Turning either off changes nothing about the pacing. A note's hold is how long its own sentence takes, spoken or not, so the same script runs to the same length with them up or down and the two can be judged against each other.
+
 ## How a step reaches Rack
 
 Through Rack's own event system. `APP->event->handleButton`, `handleHover`, `handleScroll` and `handleKey` are the functions Rack's own GLFW callbacks call, so a step driven through them does exactly what a person doing it would do. Menus, cable drags, module dragging, the module browser and text fields all work with no code of their own.
 
 **Every step then asserts what it claimed to do.** After a patch step the cable exists between those two ports; after a set the parameter holds that value; after an add the module is on the rack. A click two pixels off a jack does nothing and would otherwise carry on silently to the end of the take, which is the one real objection to driving the interface this way. A failed assertion stops the run and names the step.
 
-Direct calls remain available underneath — `Engine::setParamValue`, `Engine::addCable`, `RackWidget::addModule` — for anything injection turns out to handle badly. Nothing is expected to need them at the outset.
+**One thing is deliberately not injected: a value.** How far a knob turns for a given movement is the knob's own business — its range, its sensitivity, whether it snaps — so a drag long enough to reach a value on one control overshoots on the next, and neither distance is knowable from a script. A `set` step writes the value through the parameter and lets the pointer show a drag over the top of it. This is the one place where the theatre and the behaviour are different things on purpose, and it is why a `set` can be checked against the value it asked for.
+
+Everything else goes through the event system. Direct calls remain available underneath for anything injection turns out to handle badly.
 
 The real mouse is a hazard for the length of a take: if it moves, Rack delivers a hover to whatever it is over and the highlight follows it rather than the synthetic pointer. The overlay swallows real mouse movement while a demo is running.
 
@@ -146,7 +161,27 @@ Stepping runs with every wait collapsed and says nothing. An author walking a sc
 
 Every step is preceded by a snapshot of the whole patch, which is what makes stepping backwards as cheap as stepping forwards. Rack saves and loads a patch to a path, so a snapshot is a file in a scratch directory and a step back is a load.
 
-The user's own patch is snapshotted the same way before a demo starts and restored when it ends, however it ends. Rack's autosave is left alone; the demo's patches are written to a directory of the plugin's own.
+The user's own patch is snapshotted the same way before a demo starts, and handed back on an explicit act: Stop pressed a second time, loading another script, or closing the transport.
+
+**Not on the last step.** A script that reaches its end leaves the rack it built standing. A take that cut back to the viewer's own patch on the final frame would be unusable, and an author wants to look at what the demo made. So the end of a script puts the window into the same state as a Stop — the button reads Reset — and one press hands the patch back. A failed step lands in the same place.
+
+**Not on exit either.** A remove event says nothing about why it fired: it fires when the window is closed and again when Rack destroys the scene at quit. Loading a patch inside the application's own teardown reaches a patch manager that is already half gone, which is a crash on the way out and a patch silently replaced. So the restore is done only for a close somebody asked for, and the patch history is what recovers a rack the demo was still holding when Rack exited.
+
+Rack's autosave is left alone; the demo's patches are written to a directory of the plugin's own.
+
+## The patch history
+
+Rack keeps one autosave and overwrites it every fifteen seconds, so a crash or a mistake costs whatever was there — there is nothing older to go back to. So a dated copy of the patch is written every time the patch changes, with its report beside it, and the newest four hundred are kept. That is several hours of continuous work, and a patch file is small enough that the whole history is smaller than one screenshot.
+
+It is a safety net rather than version control: no names and no messages, just the rack as it stood at a moment, and a menu that lists them newest first and asks before replacing what is there.
+
+## Reading somebody else's patch
+
+A patch file records a cable as a pair of port numbers, and what those ports are called lives only in the running program, where each module declares them with configParam, configInput and configOutput. So two files are written that turn the numbers back into names.
+
+**The port index** builds one of every module of every installed plugin and writes what each of its controls is called, indexed by exactly the number a patch file records, together with each plugin's licence and source URL — which decides whether a question about a module's behaviour can be answered by reading its code. It is written a line at a time and flushed as it goes, and each model's name goes down before that model is built, so a plugin that misbehaves in its constructor is named by the last line in the file rather than losing the whole run.
+
+**The patch report** describes the rack as it stands, in names rather than numbers: the modules, their settings with units, every cable written as one named port to another, and which inputs have nothing patched into them. That last line is the one that finds a patch making no sound. It rewrites itself every fifteen seconds whenever it has something different to say.
 
 ## Determinism
 
@@ -164,8 +199,8 @@ The player is the authoring tool. There is no separate editor at the outset; the
 
 Each phase stands alone and is worth having before the next exists.
 
-1. **The overlay and the theatre** — the transport window, the synthetic pointer, the badge, the ripple, the card and its berths. Nothing is driven yet; a fixed list of coordinates proves the surface.
-2. **Gestures and control resolution** — names to widgets to positions, and the seven gestures injected into Rack's event system, each asserting its result.
-3. **The script and the runner** — the markdown parser, the step vocabulary, the pacing, snapshots and stepping.
+1. **The overlay and the theatre** — the transport window, the synthetic pointer, the badge, the ripple, the card and its berths. *Done.*
+2. **Gestures and control resolution** — names to widgets to positions, and the seven gestures injected into Rack's event system, each asserting its result. *Done.*
+3. **The script and the runner** — the markdown parser, the step vocabulary, the pacing, snapshots and stepping. *Done.*
 4. **Narration** — hashing, `say`, `afinfo`, `afplay`, and ducking.
 5. **The first video** — a script for mpxChart, which is the module that most needs showing rather than describing.

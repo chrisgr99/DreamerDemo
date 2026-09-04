@@ -16,6 +16,15 @@ namespace demo {
 
 
 struct Card : widget::Widget {
+	/** WHETHER THE CARD IS SHOWN AT ALL. Experience with the same system in DreamRack was that a
+	demo reads better with the captions and the badges both off and the speech carrying the
+	action: written narration and spoken narration are the same words twice, and the eye stops
+	watching the thing being demonstrated in order to read.
+
+	The pacing does not change either way — a note's hold is how long its sentence takes, spoken
+	or not — so a script runs to the same length with the card up or down. */
+	bool enabled = true;
+
 	Card();
 
 	/** Put a note up. `avoid` is the region the coming steps will work in, in scene
@@ -34,6 +43,11 @@ struct Card : widget::Widget {
 private:
 	std::string text;
 	math::Rect avoid;
+	/** The transport, which the card must never cover, because the way out of a message is to
+	press a button and a covered button cannot be pressed. Held apart from `avoid` rather than
+	merged with it: two rectangles at opposite ends of the window merge into one that covers
+	everything between them, and then no berth is free. */
+	math::Rect avoidControls;
 	int pinned = -1;
 	/** Chosen on the first draw after the text changes, because choosing needs the text
 	measured and measuring needs a drawing context. */

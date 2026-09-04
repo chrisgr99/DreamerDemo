@@ -1,0 +1,113 @@
+#include "Gesture.hpp"
+#include "Theatre.hpp"
+
+#include <GLFW/glfw3.h>
+
+namespace demo {
+
+
+/** The overlay swallows real mouse movement while a demo runs, so that the viewer's own mouse
+cannot light a control the synthetic pointer is nowhere near. An INJECTED event has to get past
+that, so it says so on the way through. */
+struct Injecting {
+	Injecting() { theatre()->injecting = true; }
+	~Injecting() { theatre()->injecting = false; }
+};
+
+
+void gHover(math::Vec pos, math::Vec delta) {
+	Injecting guard;
+	APP->event->handleHover(pos, delta);
+}
+
+
+void gPress(math::Vec pos, int button) {
+	Injecting guard;
+	APP->event->handleButton(pos, button, GLFW_PRESS, 0);
+}
+
+
+void gRelease(math::Vec pos, int button) {
+	Injecting guard;
+	APP->event->handleButton(pos, button, GLFW_RELEASE, 0);
+}
+
+
+void gClick(math::Vec pos, int button) {
+	// HOVERED FIRST. Rack sends a button event to the widget under the pointer, and what it
+	// believes is under the pointer is whatever it last hovered. Clicking without moving there
+	// first delivers the press to wherever the real mouse was left.
+	gHover(pos, math::Vec(0.f, 0.f));
+	gPress(pos, button);
+	gRelease(pos, button);
+}
+
+
+void gScroll(math::Vec pos, math::Vec delta) {
+	Injecting guard;
+	APP->event->handleHover(pos, math::Vec(0.f, 0.f));
+	APP->event->handleScroll(pos, delta);
+}
+
+
+void gSetParam(const Target& t, float unit) {
+	if (!t.module || t.paramId < 0)
+		return;
+	engine::ParamQuantity* pq = t.module->paramQuantities[t.paramId];
+	if (!pq)
+		return;
+	const float lo = pq->getMinValue();
+	const float hi = pq->getMaxValue();
+	pq->setValue(lo + math::clamp(unit, 0.f, 1.f) * (hi - lo));
+}
+
+
+float gParamUnit(const Target& t) {
+	if (!t.module || t.paramId < 0)
+		return 0.f;
+	engine::ParamQuantity* pq = t.module->paramQuantities[t.paramId];
+	if (!pq)
+		return 0.f;
+	const float lo = pq->getMinValue();
+	const float hi = pq->getMaxValue();
+	if (hi == lo)
+		return 0.f;
+	return (pq->getValue() - lo) / (hi - lo);
+}
+
+
+bool gCableExists(engine::Module* outModule, int outId,
+	engine::Module* inModule, int inId) {
+	for (int64_t id : APP->engine->getCableIds()) {
+		engine::Cable* c = APP->engine->getCable(id);
+		if (!c)
+			continue;
+		if (c->outputModule == outModule && c->outputId == outId
+			&& c->inputModule == inModule && c->inputId == inId)
+			return true;
+	}
+	return false;
+}
+
+
+int gCableCount(const Target& port) {
+	if (!port.module || port.portId < 0)
+		return 0;
+	int n = 0;
+	for (int64_t id : APP->engine->getCableIds()) {
+		engine::Cable* c = APP->engine->getCable(id);
+		if (!c)
+			continue;
+		if (port.portType == engine::Port::OUTPUT) {
+			if (c->outputModule == port.module && c->outputId == port.portId)
+				n++;
+		}
+		else if (c->inputModule == port.module && c->inputId == port.portId) {
+			n++;
+		}
+	}
+	return n;
+}
+
+
+} // namespace demo

@@ -19,8 +19,11 @@ static const float RIPPLE_LIFE = 0.75f;   // seconds
 static const int RIPPLE_RINGS = 3;
 static const float RIPPLE_STAGGER = 0.11f;
 
-static const float BADGE_GAP = 15.f;      // pointer to the near corner of the badge
-static const float BADGE_TEXT = 14.f;
+/** THE ONE NUMBER THE BADGE IS BUILT FROM. It is read at a glance, from across a room or through
+a magnified view, while the pointer is the thing being watched — so it is set at caption size
+rather than at the size of a tooltip. Everything else about the badge is a fraction of this. */
+static const float BADGE_TEXT = 70.f;
+static const float BADGE_GAP = BADGE_TEXT * 0.4f;   // pointer to the near corner of the badge
 
 
 /** Smooth at both ends. A pointer that starts and stops abruptly reads as a jump cut, and the
@@ -181,8 +184,8 @@ void Theatre::drawBadge(NVGcontext* vg, math::Vec p) {
 	nvgFontSize(vg, BADGE_TEXT);
 	float bounds[4] = {0.f, 0.f, 0.f, 0.f};
 	nvgTextBounds(vg, 0.f, 0.f, badge.c_str(), NULL, bounds);
-	const float w = bounds[2] - bounds[0] + 16.f;
-	const float h = BADGE_TEXT + 9.f;
+	const float w = bounds[2] - bounds[0] + BADGE_TEXT * 0.46f;
+	const float h = BADGE_TEXT * 1.34f;
 
 	// Beside the pointer, on the side it is not travelling towards, and flipped back on itself
 	// rather than allowed off the edge of the window.
@@ -194,16 +197,16 @@ void Theatre::drawBadge(NVGcontext* vg, math::Vec p) {
 	const float y = math::clamp(p.y - h / 2.f + 6.f, 4.f, box.size.y - h - 4.f);
 
 	nvgBeginPath(vg);
-	nvgRoundedRect(vg, x, y, w, h, 3.f);
+	nvgRoundedRect(vg, x, y, w, h, BADGE_TEXT * 0.12f);
 	nvgFillColor(vg, CHIP);
 	nvgFill(vg);
 	nvgStrokeColor(vg, nvgRGB(0xcf, 0xcf, 0xcf));
-	nvgStrokeWidth(vg, 1.f);
+	nvgStrokeWidth(vg, 1.5f);
 	nvgStroke(vg);
 
 	nvgFillColor(vg, INK);
 	nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-	nvgText(vg, x + 8.f, y + h / 2.f + 0.5f, badge.c_str(), NULL);
+	nvgText(vg, x + BADGE_TEXT * 0.23f, y + h / 2.f + 0.5f, badge.c_str(), NULL);
 }
 
 
@@ -244,7 +247,7 @@ void Theatre::draw(const DrawArgs& args) {
 		}
 	}
 
-	if (!badge.empty())
+	if (badges && !badge.empty())
 		drawBadge(args.vg, cursor);
 
 	if (running)

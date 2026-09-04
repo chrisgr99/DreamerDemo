@@ -33,5 +33,14 @@ void raiseTheatre();
 /** Opens the transport, or brings it forward if it is already up. */
 void transportShow();
 
+/** THE TRANSPORT STANDS OUT OF THE WAY of the region a demo is about to work in. It is an opaque
+window over the rack, so a click aimed at a control underneath it would land on the transport
+instead. Called once per note, with the region that note's steps will touch. */
+void transportStepAside(math::Rect region);
+
+/** Where the transport is, in scene coordinates, or an empty rectangle when it is not open. The
+card keeps clear of it: a note that covers the controls cannot be dismissed by pressing one. */
+math::Rect transportRect();
+
 
 } // namespace demo

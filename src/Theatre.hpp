@@ -30,6 +30,12 @@ struct Theatre : widget::Widget {
 	passes through this widget instead of being eaten by it. Phase two uses it. */
 	bool injecting = false;
 
+	/** WHETHER THE BADGE IS SHOWN AT ALL. Once the narration is speaking, "left click" is said
+	as well as written, and a caption that repeats the voice is a caption in the way. A script
+	turns it off for its own length; the pacing is unaffected either way, so a demo runs to the
+	same length with the badge up or down and the two can be judged against each other. */
+	bool badges = true;
+
 	Theatre();
 
 	/** Where the pointer is now, in scene coordinates. */

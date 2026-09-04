@@ -11,6 +11,9 @@ costs a viewer nothing.
 #include "Runner.hpp"
 #include "Theatre.hpp"
 #include "Card.hpp"
+#include "Script.hpp"
+
+#include <osdialog.h>
 
 #include <GLFW/glfw3.h>
 
@@ -18,15 +21,16 @@ namespace demo {
 
 
 static const float T_TITLE = 22.f;
-static const float T_W = 486.f;
+static const float T_W = 828.f;
 static const float T_H = 76.f;
 static const float BTN_H = 30.f;
 static const float BTN_Y = T_TITLE + 12.f;
 static const float BTN_GAP = 8.f;
 static const float BTN_PAD = 12.f;
 
-enum Button { B_RUN, B_RESTART, B_BACK, B_STEP, B_RATE, B_COUNT };
-static const float BTN_W[B_COUNT] = {74.f, 86.f, 62.f, 62.f, 92.f};
+enum Button { B_SCRIPT, B_RUN, B_RESTART, B_BACK, B_STEP, B_RATE, B_BADGES, B_CAPTIONS,
+	B_COUNT };
+static const float BTN_W[B_COUNT] = {224.f, 74.f, 86.f, 62.f, 62.f, 92.f, 78.f, 92.f};
 
 static const float RATES[4] = {0.75f, 1.0f, 1.5f, 2.0f};
 
@@ -34,6 +38,17 @@ static const float RATES[4] = {0.75f, 1.0f, 1.5f, 2.0f};
 /** Where the window was last put. A transport that opens in the middle of the rack every time
 would be moved out of the way every time. */
 static math::Vec gWhere = math::Vec(-1.f, -1.f);
+
+
+/** True only while the window is being closed BY SOMEBODY. A remove event says nothing about
+why: it fires when you press the cross, and it fires again when Rack exits and destroys the whole
+scene. Restoring the session means loading a patch file, and doing that inside the application's
+own teardown reaches a patch manager that is already half gone — which is a crash at quit, and a
+patch quietly replaced on the way out.
+
+So the session is handed back only on a close somebody asked for. On exit the rack is left as it
+stands, and the patch history is what gets it back. */
+static bool gClosing = false;
 
 
 // ---------------------------------------------------------------- the stage
@@ -69,57 +84,101 @@ void raiseTheatre() {
 }
 
 
-// ---------------------------------------------------------------- phase one's script
+// ------------------------------------------------------- the script, until phase three
 
-/** SCAFFOLDING, and the only part of phase one that is thrown away. It exercises every piece of
-the surface — a note taking a berth away from the action, a pointer announcing its move and
-travelling, a badge naming a gesture, a ripple, a glow — with positions given as fractions of the
-window, because control resolution is phase two.
+/** SCAFFOLDING, and the last piece of phase one still standing. Phase three reads a script off a
+markdown file; until then this one is built from whatever is on the rack when Run is pressed, so
+it exercises resolution and every gesture against real modules rather than against a fixture.
 
-The prose is what a real script's prose looks like: what is happening, in the app's own words. */
-static std::vector<Step> cannedScript() {
+It is a self-test as much as a demonstration: if a name cannot be found, a control is off the
+screen, a value does not arrive or a cable is not made, the run stops and says so. */
+static std::vector<Step> selfTestScript(Stage& stage) {
+	stage.clear();
 	std::vector<Step> s;
 
-	Step title;
-	title.note = "This is the demo transport. Everything below is drawn over the rack: "
-		"the pointer, the label beside it, and this card.";
-	title.wait = 1.2f;
-	s.push_back(title);
+	// The first module with a parameter, and a pair with an output and an input between them.
+	// Our own module is skipped: a demo of the demo transport pointing at the demo transport
+	// proves nothing.
+	app::ModuleWidget* withParam = NULL;
+	app::ModuleWidget* withOut = NULL;
+	app::ModuleWidget* withIn = NULL;
+	for (app::ModuleWidget* mw : APP->scene->rack->getModules()) {
+		if (!mw->module || !mw->module->model)
+			continue;
+		if (mw->module->model->plugin == pluginInstance)
+			continue;
+		if (!withParam && !mw->getParams().empty())
+			withParam = mw;
+		if (!withOut && !mw->getOutputs().empty())
+			withOut = mw;
+		if (!withIn && mw != withOut && !mw->getInputs().empty())
+			withIn = mw;
+	}
 
-	Step a;
-	a.note = "The pointer announces where it is going before it goes, and waits when it "
-		"arrives. You are told what is about to happen, and then it happens.";
-	a.frac = math::Vec(0.22f, 0.30f);
-	a.gesture = "left click";
-	a.act = true;
-	a.glowFrac = math::Rect(math::Vec(0.20f, 0.28f), math::Vec(0.05f, 0.05f));
-	s.push_back(a);
+	if (!withParam && !withOut) {
+		Step none;
+		none.note = "There is nothing on the rack to demonstrate. Add a module or two with "
+			"knobs and jacks, then press Run again.";
+		none.wait = 3.f;
+		s.push_back(none);
+		return s;
+	}
 
-	Step b;
-	b.frac = math::Vec(0.70f, 0.24f);
-	b.gesture = "left click";
-	b.act = true;
-	b.glowFrac = math::Rect(math::Vec(0.68f, 0.22f), math::Vec(0.05f, 0.05f));
-	s.push_back(b);
+	Step opening;
+	opening.note = "Everything from here is done through Rack's own event system, so the "
+		"pointer is really pressing these controls. Each step checks afterwards that it "
+		"worked.";
+	opening.wait = 0.6f;
+	s.push_back(opening);
 
-	Step c;
-	c.note = "A note stays up until another note replaces it, so one card can cover several "
-		"steps. This one covered two.";
-	c.frac = math::Vec(0.50f, 0.55f);
-	c.gesture = "drag";
-	c.act = true;
-	c.glowFrac = math::Rect(math::Vec(0.44f, 0.50f), math::Vec(0.12f, 0.10f));
-	c.wait = 1.0f;
-	s.push_back(c);
+	if (withParam) {
+		stage.bindId("a", withParam->module->id);
 
-	Step d;
-	d.note = "The card takes a berth clear of wherever the coming steps are going to work, and "
-		"stays there while you read it.";
-	d.frac = math::Vec(0.16f, 0.20f);
-	d.gesture = "scroll wheel";
-	d.act = true;
-	d.wait = 1.4f;
-	s.push_back(d);
+		Step point;
+		point.kind = Step::POINT;
+		point.target = "a:#0";
+		point.note = "Controls are addressed by name, and turned into a place on the screen "
+			"at the last moment — so a script survives any window size, zoom or scroll.";
+		s.push_back(point);
+
+		Step set;
+		set.kind = Step::SET;
+		set.target = "a:#0";
+		set.value = 0.85f;
+		set.note = "A value travels rather than jumping. The pointer shows a drag; the value "
+			"itself is written, because how far a knob turns for a given movement is the "
+			"knob's own business.";
+		set.wait = 0.5f;
+		s.push_back(set);
+
+		Step back;
+		back.kind = Step::SET;
+		back.target = "a:#0";
+		back.value = 0.15f;
+		s.push_back(back);
+	}
+
+	if (withOut && withIn) {
+		stage.bindId("out", withOut->module->id);
+		stage.bindId("in", withIn->module->id);
+
+		Step patch;
+		patch.kind = Step::PATCH;
+		patch.target = "out:out:#0";
+		patch.target2 = "in:in:#0";
+		patch.note = "A cable is a held drag, not a click at each end, because that is how one "
+			"is really made. The step then asks the engine whether the cable exists.";
+		patch.wait = 0.8f;
+		s.push_back(patch);
+
+		Step unpatch;
+		unpatch.kind = Step::UNPATCH;
+		unpatch.target = "in:in:#0";
+		unpatch.note = "And off again: pulled from the jack and dropped on bare rack, which is "
+			"what deletes one.";
+		unpatch.wait = 1.2f;
+		s.push_back(unpatch);
+	}
 
 	return s;
 }
@@ -135,7 +194,87 @@ struct Transport : widget::OpaqueWidget {
 
 	Transport() {
 		box.size = math::Vec(T_W, T_H);
-		runner.load(cannedScript());
+		rebuild();
+	}
+
+	/** The script that is loaded, if one is. Empty means the self test, which is built from the
+	rack as it stands so that pressing Run with no script still demonstrates something. */
+	std::string scriptPath;
+
+	void rebuild() {
+		if (scriptPath.empty()) {
+			runner.bindings.clear();
+			runner.patchPath.clear();
+			runner.title = "Self test";
+			runner.pacing = Pacing();
+			runner.load(selfTestScript(runner.stage));
+			return;
+		}
+		loadScript(scriptPath);
+	}
+
+	/** Read a script off disk and set the runner up from its header. Re-reading the same path is
+	Reload, which is how an author corrects a sentence and hears it again.
+
+	A SCRIPT THAT WILL NOT PARSE IS NOT LOADED AT ALL. Its error goes where a failed step's goes,
+	across the title strip, because a script with a mistake in it should say so before a take
+	starts rather than halfway through one. */
+	void loadScript(const std::string& path) {
+		const Script sc = scriptLoad(path);
+		if (!sc.error.empty()) {
+			runner.failure = sc.error;
+			return;
+		}
+		runner.stop();
+		runner.releaseSession();
+		scriptPath = path;
+		runner.failure.clear();
+		runner.pacing = sc.pacing;
+		runner.bindings = sc.bindings;
+		runner.patchPath = sc.patchPath;
+		runner.scriptPath = sc.path;
+		runner.title = sc.title.empty() ? system::getFilename(path) : sc.title;
+		runner.load(sc.steps);
+		theatre()->badges = sc.badges;
+		card()->enabled = sc.captions;
+		stopped = false;
+	}
+
+	/** THE SCRIPTS THERE ARE, plus the things an author does with them. A list rather than a file
+	dialog, because the folder is where scripts live and choosing one should be one press and one
+	row. */
+	void chooseScript() {
+		ui::Menu* menu = createMenu();
+		menu->addChild(createMenuLabel("Scripts, most recently edited first"));
+		const std::vector<std::string> found = scriptList();
+		for (const std::string& path : found) {
+			const std::string name = system::getFilename(path);
+			menu->addChild(createCheckMenuItem(name, "",
+				[=]() { return path == scriptPath; },
+				[=]() { loadScript(path); }));
+		}
+		if (found.empty())
+			menu->addChild(createMenuLabel("none in " + scriptDir()));
+
+		menu->addChild(new MenuSeparator);
+		menu->addChild(createMenuItem("Reload", "", [=]() {
+			if (!scriptPath.empty())
+				loadScript(scriptPath);
+		}));
+		menu->addChild(createMenuItem("Open a file\u2026", "", [=]() {
+			char* chosen = osdialog_file(OSDIALOG_OPEN, scriptDir().c_str(), NULL, NULL);
+			if (!chosen)
+				return;
+			loadScript(chosen);
+			std::free(chosen);
+		}));
+		menu->addChild(createMenuItem("Self test", "", [=]() {
+			scriptPath.clear();
+			rebuild();
+		}));
+		menu->addChild(createMenuItem("Show the scripts folder", "", []() {
+			system::openDirectory(scriptDir());
+		}));
 	}
 
 	math::Rect closeLeft() {
@@ -155,10 +294,16 @@ struct Transport : widget::OpaqueWidget {
 
 	std::string buttonLabel(int i) {
 		switch (i) {
+			// THE FIELD SHOWS WHAT IS LOADED. A picker whose face says only "Script" makes you
+			// open it to find out which one you are about to run.
+			case B_SCRIPT: return runner.title.empty() ? "Self test" : runner.title;
 			case B_RUN: return runner.isRunning() ? "Stop" : (stopped ? "Reset" : "Run");
 			case B_RESTART: return "Restart";
 			case B_BACK: return "Back";
 			case B_STEP: return "Step";
+			// Lit when on, so the label is the name of the thing rather than its state.
+			case B_BADGES: return "Badges";
+			case B_CAPTIONS: return "Captions";
 			default: {
 				char buf[24];
 				std::snprintf(buf, sizeof(buf), "Rate %.2gx", runner.rate);
@@ -168,7 +313,18 @@ struct Transport : widget::OpaqueWidget {
 	}
 
 	void press(int i) {
+		// ANY PRESS BUT RUN TAKES THE MESSAGE DOWN. A failure has to stay up long enough to be
+		// read, and then it has to be dismissable by doing something — otherwise the only way
+		// out of it is to close the window.
+		if (i != B_RUN) {
+			runner.failure.clear();
+			if (!runner.isRunning())
+				card()->hide();
+		}
 		switch (i) {
+			case B_SCRIPT:
+				chooseScript();
+				break;
 			case B_RUN:
 				if (runner.isRunning()) {
 					// First press: stand still, with the rack as the demo left it.
@@ -176,18 +332,23 @@ struct Transport : widget::OpaqueWidget {
 					stopped = true;
 				}
 				else if (stopped) {
-					// Second press: put everything back. In phase one that is the pointer and
-					// the card; from phase three it is the user's own patch.
+					// Second press: put everything back, the user's own patch included.
 					card()->hide();
 					theatre()->clear();
+					runner.releaseSession();
+					runner.failure.clear();
 					stopped = false;
 				}
 				else {
+					if (scriptPath.empty())
+						rebuild();
 					runner.run();
 				}
 				break;
 			case B_RESTART:
 				stopped = false;
+				if (scriptPath.empty())
+					rebuild();
 				runner.restart();
 				break;
 			case B_BACK:
@@ -197,6 +358,12 @@ struct Transport : widget::OpaqueWidget {
 			case B_STEP:
 				stopped = true;
 				runner.stepOnce();
+				break;
+			case B_BADGES:
+				theatre()->badges = !theatre()->badges;
+				break;
+			case B_CAPTIONS:
+				card()->enabled = !card()->enabled;
 				break;
 			default: {
 				int k = 0;
@@ -213,7 +380,9 @@ struct Transport : widget::OpaqueWidget {
 	void onButton(const ButtonEvent& e) override {
 		if (e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT) {
 			if (closeLeft().contains(e.pos) || closeRight().contains(e.pos)) {
+				gClosing = true;
 				requestDelete();
+				gClosing = false;
 				e.consume(this);
 				e.stopPropagating();
 				return;
@@ -248,8 +417,22 @@ struct Transport : widget::OpaqueWidget {
 	and stands down while a menu or a text field has it. */
 	bool escapeWasDown = false;
 
+	/** Whether the runner was running on the previous frame, so the moment it stops can be
+	noticed. */
+	bool wasRunning = false;
+
 	void step() override {
 		runner.tick();
+
+		// A SCRIPT THAT REACHES ITS LAST STEP HAS STOPPED, not finished with. The rack it built
+		// stays exactly as it is — a take that cut back to the viewer's own patch on the last
+		// frame would be unusable, and an author wants to look at what the demo made — so the
+		// end of a script leaves the window standing on it, with the button reading Reset. One
+		// press then hands the patch back. A failed step lands in the same place.
+		if (wasRunning && !runner.isRunning())
+			stopped = true;
+		wasRunning = runner.isRunning();
+
 		// THE POINTER IS UP FOR AS LONG AS THE DEMO OWNS THE SCREEN, which includes standing
 		// stopped on a step. It goes away, and the real cursor comes back, only when the demo
 		// has been put back.
@@ -268,7 +451,9 @@ struct Transport : widget::OpaqueWidget {
 						menuUp = true;
 				}
 				if (!menuUp) {
+					gClosing = true;
 					requestDelete();
+					gClosing = false;
 					return;
 				}
 			}
@@ -280,10 +465,42 @@ struct Transport : widget::OpaqueWidget {
 		if (e.action == GLFW_PRESS && e.key == GLFW_KEY_ESCAPE) {
 			e.consume(this);
 			e.stopPropagating();
+			gClosing = true;
 			requestDelete();
+			gClosing = false;
 			return;
 		}
 		OpaqueWidget::onHoverKey(e);
+	}
+
+	/** A name that will not fit is cut and finished with an ellipsis, rather than running out
+	of its field. */
+	std::string fit(NVGcontext* vg, std::string text, float width) {
+		float bounds[4] = {0.f, 0.f, 0.f, 0.f};
+		nvgTextBounds(vg, 0.f, 0.f, text.c_str(), NULL, bounds);
+		if (bounds[2] - bounds[0] <= width)
+			return text;
+		while (text.size() > 1) {
+			text.resize(text.size() - 1);
+			const std::string tryIt = text + "\u2026";
+			nvgTextBounds(vg, 0.f, 0.f, tryIt.c_str(), NULL, bounds);
+			if (bounds[2] - bounds[0] <= width)
+				return tryIt;
+		}
+		return text;
+	}
+
+	/** A chevron, so a field that opens a list looks like one. */
+	void drawChevron(NVGcontext* vg, float x, float y, float r) {
+		nvgBeginPath(vg);
+		nvgMoveTo(vg, x - r, y - r * 0.45f);
+		nvgLineTo(vg, x, y + r * 0.55f);
+		nvgLineTo(vg, x + r, y - r * 0.45f);
+		nvgStrokeColor(vg, INK);
+		nvgStrokeWidth(vg, std::fmax(1.2f, r * 0.34f));
+		nvgLineCap(vg, NVG_ROUND);
+		nvgLineJoin(vg, NVG_ROUND);
+		nvgStroke(vg);
 	}
 
 	void drawChip(NVGcontext* vg, math::Rect r, const std::string& label, bool lit) {
@@ -304,6 +521,28 @@ struct Transport : widget::OpaqueWidget {
 		nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 		nvgText(vg, r.pos.x + r.size.x / 2.f, r.pos.y + r.size.y / 2.f + 0.5f,
 			label.c_str(), NULL);
+	}
+
+	/** The script picker: a field carrying the name of what is loaded, with a chevron. */
+	void drawField(NVGcontext* vg, math::Rect r, const std::string& label) {
+		nvgBeginPath(vg);
+		nvgRoundedRect(vg, r.pos.x, r.pos.y, r.size.x, r.size.y, 4.f);
+		nvgFillColor(vg, nvgRGB(0x1a, 0x1a, 0x1e));
+		nvgFill(vg);
+		nvgStrokeColor(vg, nvgRGBA(0xcf, 0xcf, 0xcf, 0x90));
+		nvgStrokeWidth(vg, 1.f);
+		nvgStroke(vg);
+
+		std::shared_ptr<window::Font> font = uiFont();
+		if (!font || font->handle < 0)
+			return;
+		nvgFontFaceId(vg, font->handle);
+		nvgFontSize(vg, 14.f);
+		nvgFillColor(vg, INK);
+		nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+		nvgText(vg, r.pos.x + 10.f, r.pos.y + r.size.y / 2.f + 0.5f,
+			fit(vg, label, r.size.x - 32.f).c_str(), NULL);
+		drawChevron(vg, r.pos.x + r.size.x - 12.f, r.pos.y + r.size.y / 2.f - 1.f, 4.5f);
 	}
 
 	void drawCross(NVGcontext* vg, math::Rect r) {
@@ -352,14 +591,31 @@ struct Transport : widget::OpaqueWidget {
 			nvgFontSize(args.vg, T_TITLE * 0.72f);
 			nvgFillColor(args.vg, INK);
 			nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-			char buf[64];
-			std::snprintf(buf, sizeof(buf), "Demo — step %d of %d",
-				runner.at() + 1, (int) runner.steps.size());
+			// A FAILED STEP IS NAMED IN THE TITLE, not only in the card. The card is the
+			// viewer's; this strip is the author's, and it is where you look when a take
+			// stopped early.
+			char buf[240];
+			if (!runner.failure.empty()) {
+				std::snprintf(buf, sizeof(buf), "%s", runner.failure.c_str());
+				nvgFillColor(args.vg, ACCENT);
+			}
+			else {
+				std::snprintf(buf, sizeof(buf), "%s — step %d of %d",
+					runner.title.c_str(), runner.at() + 1, (int) runner.steps.size());
+			}
 			nvgText(args.vg, box.size.x / 2.f, T_TITLE / 2.f, buf, NULL);
 		}
 
-		for (int i = 0; i < B_COUNT; i++)
-			drawChip(args.vg, buttonRect(i), buttonLabel(i), i == B_RUN && runner.isRunning());
+		for (int i = 0; i < B_COUNT; i++) {
+			if (i == B_SCRIPT) {
+				drawField(args.vg, buttonRect(i), buttonLabel(i));
+				continue;
+			}
+			const bool lit = (i == B_RUN && runner.isRunning())
+				|| (i == B_BADGES && theatre()->badges)
+				|| (i == B_CAPTIONS && card()->enabled);
+			drawChip(args.vg, buttonRect(i), buttonLabel(i), lit);
+		}
 
 		OpaqueWidget::draw(args);
 	}
@@ -370,20 +626,72 @@ struct Transport : widget::OpaqueWidget {
 
 static Transport* gTransport = NULL;
 
+/** True while the window is only being reordered. REORDERING IS A REMOVE AND AN ADD — that is how
+Rack raises a child — and removeChild dispatches the remove event before it unhooks anything. So
+onRemove fires on a window that is not going anywhere, and without this it would stop the run,
+hand the user's patch back and null the pointer that the very next line uses. */
+static bool gRaising = false;
+
 void Transport::onRemove(const RemoveEvent& e) {
-	runner.stop();
-	if (gCard)
-		gCard->hide();
-	if (gTransport == this)
-		gTransport = NULL;
+	if (!gRaising) {
+		runner.stop();
+		if (gClosing)
+			runner.releaseSession();
+		if (gCard)
+			gCard->hide();
+		if (gTransport == this)
+			gTransport = NULL;
+	}
 	OpaqueWidget::onRemove(e);
+}
+
+
+math::Rect transportRect() {
+	if (!gTransport)
+		return math::Rect();
+	return math::Rect(gTransport->box.pos, gTransport->box.size);
+}
+
+
+/** Six places the transport can stand, in preference order. The top of the window first, because
+the card prefers the bottom and the two must not be sent to the same corner. */
+void transportStepAside(math::Rect region) {
+	if (!gTransport || region.size.x <= 0.f || region.size.y <= 0.f)
+		return;
+	const math::Rect mine(gTransport->box.pos, gTransport->box.size);
+	if (!mine.intersects(region))
+		return;
+
+	const math::Vec scene = APP->scene->box.size;
+	const float m = 24.f;
+	const float cx = (scene.x - T_W) / 2.f;
+	const math::Vec spots[6] = {
+		math::Vec(cx, m),
+		math::Vec(m, m),
+		math::Vec(scene.x - T_W - m, m),
+		math::Vec(m, scene.y - T_H - m),
+		math::Vec(scene.x - T_W - m, scene.y - T_H - m),
+		math::Vec(cx, scene.y - T_H - m),
+	};
+	for (int i = 0; i < 6; i++) {
+		const math::Rect there(spots[i], gTransport->box.size);
+		if (!there.intersects(region)) {
+			gTransport->box.pos = spots[i];
+			gWhere = spots[i];
+			return;
+		}
+	}
+	// Nowhere is clear. Leave it where the author put it rather than shuffling it about.
 }
 
 
 void transportShow() {
 	if (gTransport) {
-		APP->scene->removeChild(gTransport);
-		APP->scene->addChild(gTransport);
+		Transport* window = gTransport;
+		gRaising = true;
+		APP->scene->removeChild(window);
+		APP->scene->addChild(window);
+		gRaising = false;
 		raiseTheatre();
 		return;
 	}

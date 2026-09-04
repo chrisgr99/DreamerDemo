@@ -1,24 +1,184 @@
 #include "Runner.hpp"
 #include "Theatre.hpp"
 #include "Card.hpp"
+#include "Gesture.hpp"
+
+#include <patch.hpp>
+
+#include <GLFW/glfw3.h>
 
 namespace demo {
 
 
-/** How long the pointer is shown pressed. Short, because it is punctuation rather than an
-event: the ripple is what says a click happened. */
+/** How long the pointer is shown pressed. Short, because it is punctuation rather than an event:
+the ripple is what says a click happened. */
 static const float PRESS = 0.18f;
 
+/** How many notches a scroll gesture is made of. One jump is not a wheel being turned; a run of
+small pulses is seen to turn. */
+static const int WHEEL_PULSES = 8;
 
-math::Vec Runner::scene() const {
-	return APP->scene->box.size;
+/** How close a parameter has to land to count as having been set. Wider than nothing, because a
+snapped or quantised parameter cannot land anywhere it likes. */
+static const float SET_TOLERANCE = 0.03f;
+
+
+// ---------------------------------------------------------------- snapshots
+
+/** WHERE A STEP'S STATE IS KEPT. A snapshot is a patch file, because a patch file is exactly the
+state a step can change, and Rack already knows how to write and read one. It also means module
+ids survive a restore, so the names a script bound still point at the same modules. */
+static std::string snapDir() {
+	const std::string dir = asset::user("DreamerDemo/snapshots");
+	if (!system::isDirectory(dir))
+		system::createDirectories(dir);
+	return dir;
 }
 
+static std::string snapPath(int i) {
+	return snapDir() + "/step-" + std::to_string(i) + ".vcv";
+}
+
+static std::string sessionPath() {
+	return snapDir() + "/session.vcv";
+}
+
+/** The path the user's own patch had, so restoring the session does not leave Rack thinking the
+demo's file is the one they were working on. */
+static std::string gSessionOwnPath;
+
+
+void Runner::snapshot(int i) {
+	try {
+		APP->patch->save(snapPath(i));
+	}
+	catch (Exception& e) {
+		// A snapshot that cannot be written costs stepping back, not the run.
+		WARN("DreamerDemo: could not snapshot step %d: %s", i, e.what());
+	}
+}
+
+
+void Runner::restoreSnapshot(int i) {
+	const std::string path = snapPath(i);
+	if (!system::isFile(path))
+		return;
+	try {
+		APP->patch->load(path);
+		APP->patch->path = gSessionOwnPath;
+		std::string why;
+		applyBindings(&why);
+	}
+	catch (Exception& e) {
+		WARN("DreamerDemo: could not restore step %d: %s", i, e.what());
+	}
+}
+
+
+void Runner::armSession() {
+	if (armed)
+		return;
+	gSessionOwnPath = APP->patch->path;
+	try {
+		APP->patch->save(sessionPath());
+		armed = true;
+	}
+	catch (Exception& e) {
+		WARN("DreamerDemo: could not save the session: %s", e.what());
+	}
+}
+
+
+void Runner::releaseSession() {
+	if (!armed)
+		return;
+	armed = false;
+	if (!system::isFile(sessionPath()))
+		return;
+	try {
+		APP->patch->load(sessionPath());
+		APP->patch->path = gSessionOwnPath;
+	}
+	catch (Exception& e) {
+		WARN("DreamerDemo: could not restore the session: %s", e.what());
+	}
+}
+
+
+// ---------------------------------------------------------------- menus
+
+/** A menu item by its text, wherever it is in whatever menu is open. Exact first, then any item
+containing it, so a script can say "Polyphony" without writing out "Polyphony channels: 4". */
+static bool menuItemRect(widget::Widget* w, const std::string& want, math::Rect* out) {
+	if (ui::MenuItem* item = dynamic_cast<ui::MenuItem*>(w)) {
+		if (item->text == want) {
+			*out = sceneRect(item);
+			return true;
+		}
+	}
+	for (widget::Widget* child : w->children) {
+		if (menuItemRect(child, want, out))
+			return true;
+	}
+	return false;
+}
+
+static bool menuItemLoose(widget::Widget* w, const std::string& want, math::Rect* out) {
+	if (ui::MenuItem* item = dynamic_cast<ui::MenuItem*>(w)) {
+		if (item->text.find(want) != std::string::npos) {
+			*out = sceneRect(item);
+			return true;
+		}
+	}
+	for (widget::Widget* child : w->children) {
+		if (menuItemLoose(child, want, out))
+			return true;
+	}
+	return false;
+}
+
+static bool findMenuItem(const std::string& want, math::Rect* out) {
+	for (widget::Widget* child : APP->scene->children) {
+		ui::MenuOverlay* overlay = dynamic_cast<ui::MenuOverlay*>(child);
+		if (!overlay || !overlay->visible || overlay->requestedDelete)
+			continue;
+		if (menuItemRect(overlay, want, out))
+			return true;
+		if (menuItemLoose(overlay, want, out))
+			return true;
+	}
+	return false;
+}
+
+
+// ---------------------------------------------------------------- the machine
 
 void Runner::load(const std::vector<Step>& s) {
 	stop();
 	steps = s;
 	index = 0;
+	failure.clear();
+}
+
+
+bool Runner::applyBindings(std::string* why) {
+	// NOTHING DECLARED, NOTHING TO CLEAR. A script that names its modules in its header is bound
+	// afresh every run, so a name left over from the last one cannot point at a module that has
+	// since gone. But a caller that bound names itself — the self test does, straight from the
+	// rack — has already put them there, and clearing would throw them away a moment before the
+	// first step asked for one.
+	if (bindings.empty())
+		return true;
+	stage.clear();
+	for (size_t i = 0; i < bindings.size(); i++) {
+		if (!stage.bindModel(bindings[i].first, bindings[i].second)) {
+			if (why)
+				*why = "there is no " + bindings[i].second + " on the rack for \""
+					+ bindings[i].first + "\"";
+			return false;
+		}
+	}
+	return true;
 }
 
 
@@ -28,23 +188,388 @@ void Runner::enter(Phase p, float seconds) {
 }
 
 
-/** THE REGION THE COMING STEPS WILL TOUCH, so the card can take a berth clear of it. It runs to
-the next note rather than to the next step, because the card is up for exactly that long. */
-static math::Rect regionFrom(const std::vector<Step>& steps, int from, math::Vec scene) {
+void Runner::fail(const std::string& why) {
+	failure = why;
+	card()->show("The demo stopped. " + why, math::Rect());
+	stop();
+}
+
+
+/** THE REGION THE COMING STEPS WILL TOUCH, so the card can take a berth clear of it, and so the
+transport can step aside. It runs to the next note rather than to the next step, because the card
+is up for exactly that long. */
+static math::Rect regionFor(const Stage& stage, const std::vector<Step>& steps, int from) {
 	math::Rect r;
 	bool any = false;
 	for (size_t i = (size_t) from; i < steps.size(); i++) {
 		if (i > (size_t) from && !steps[i].note.empty())
 			break;
-		if (steps[i].frac.x < 0.f)
-			continue;
-		const math::Vec p = math::Vec(steps[i].frac.x * scene.x, steps[i].frac.y * scene.y);
-		// Generous: a pointer at a control is a hand's worth of screen, not a point.
-		const math::Rect one(p.minus(math::Vec(90.f, 70.f)), math::Vec(180.f, 140.f));
-		r = any ? r.expand(one) : one;
-		any = true;
+		for (int which = 0; which < 2; which++) {
+			const std::string& ref = which ? steps[i].target2 : steps[i].target;
+			if (ref.empty())
+				continue;
+			const Target t = stage.find(ref);
+			if (!t.ok)
+				continue;
+			// Generous: a pointer at a control occupies a hand's worth of screen, not a point.
+			const math::Rect one = t.rect.grow(math::Vec(70.f, 60.f));
+			r = any ? r.expand(one) : one;
+			any = true;
+		}
 	}
 	return any ? r : math::Rect();
+}
+
+
+void Runner::instant(const Step& s) {
+	// Steps with no pointer in them. They happen at once, and the note beside them is what tells
+	// the viewer that something has changed.
+	switch (s.kind) {
+		case Step::ZOOM: {
+			if (s.target.empty()) {
+				APP->scene->rackScroll->zoomToModules();
+				break;
+			}
+			const Target t = stage.find(s.target);
+			if (!t.ok || !t.mw) {
+				fail("Step " + std::to_string(index + 1) + ": " + t.why + ".");
+				return;
+			}
+			// The module's own box is already in rack coordinates, which is what zoomToBound
+			// takes. A factor above one frames it with less around it.
+			const float f = std::fmax(0.2f, s.value);
+			const math::Vec pad = t.mw->box.size.mult((1.f / f) * 0.5f);
+			APP->scene->rackScroll->zoomToBound(t.mw->box.grow(pad));
+			break;
+		}
+
+		case Step::OPEN: {
+			if (!system::isFile(s.arg)) {
+				fail("Step " + std::to_string(index + 1) + ": there is no patch at " + s.arg);
+				return;
+			}
+			try {
+				APP->patch->load(s.arg);
+				APP->patch->path = gSessionOwnPath;
+			}
+			catch (Exception& e) {
+				fail("Step " + std::to_string(index + 1) + ": " + e.what());
+				return;
+			}
+			std::string why;
+			if (!applyBindings(&why)) {
+				fail("Step " + std::to_string(index + 1) + ": after loading that patch, " + why);
+				return;
+			}
+			break;
+		}
+
+		case Step::ADD: {
+			const size_t slash = s.arg.find('/');
+			if (slash == std::string::npos) {
+				fail("Step " + std::to_string(index + 1) + ": add needs \"Plugin/Model\".");
+				return;
+			}
+			plugin::Model* model = plugin::getModel(s.arg.substr(0, slash),
+				s.arg.substr(slash + 1));
+			if (!model) {
+				fail("Step " + std::to_string(index + 1) + ": there is no module " + s.arg + ".");
+				return;
+			}
+			engine::Module* module = model->createModule();
+			APP->engine->addModule(module);
+			app::ModuleWidget* mw = model->createModuleWidget(module);
+			APP->scene->rack->addModule(mw);
+
+			// BESIDE WHAT IS ALREADY THERE, on the top row, which is where a rack grows. Rack
+			// squeezes it into the nearest free space from that point.
+			float right = 0.f, top = 0.f;
+			bool anyModule = false;
+			for (app::ModuleWidget* other : APP->scene->rack->getModules()) {
+				if (other == mw)
+					continue;
+				if (!anyModule || other->box.pos.y < top)
+					top = other->box.pos.y;
+				right = std::fmax(right, other->box.pos.x + other->box.size.x);
+				anyModule = true;
+			}
+			APP->scene->rack->setModulePosNearest(mw, math::Vec(right, top));
+			stage.bindId(s.target, module->id);
+			break;
+		}
+
+		default:
+			break;
+	}
+}
+
+
+void Runner::expand(const Step& s) {
+	gests.clear();
+	gi = 0;
+	checkA = Target();
+	checkB = Target();
+	checkCount = 0;
+
+	switch (s.kind) {
+		case Step::SAY:
+		case Step::WAIT:
+			return;
+		case Step::ZOOM:
+		case Step::OPEN:
+		case Step::ADD: {
+			Gest g;
+			g.word = "";
+			g.act = Gest::INSTANT;
+			gests.push_back(g);
+			return;
+		}
+		default:
+			break;
+	}
+
+	Target a = stage.find(s.target);
+	if (!a.ok) {
+		fail("Step " + std::to_string(index + 1) + ": " + a.why + ".");
+		return;
+	}
+	if (!onScreen(a.rect)) {
+		fail("Step " + std::to_string(index + 1) + ": \"" + s.target
+			+ "\" is not on the screen. Frame it first with a zoom step.");
+		return;
+	}
+	checkA = a;
+
+	Gest move;
+	move.word = "move pointer";
+	move.act = Gest::MOVE;
+	move.pos = a.centre();
+	move.target = a;
+	gests.push_back(move);
+
+	switch (s.kind) {
+		case Step::POINT:
+			break;
+
+		case Step::CLICK:
+		case Step::RIGHT_CLICK:
+		case Step::MENU: {
+			Gest g;
+			const bool right = (s.kind != Step::CLICK);
+			g.word = right ? "right click" : "left click";
+			g.act = right ? Gest::CLICK_R : Gest::CLICK_L;
+			g.pos = a.centre();
+			g.glow = a.rect;
+			g.target = a;
+			gests.push_back(g);
+
+			if (s.kind == Step::MENU) {
+				// THE ITEM'S POSITION DOES NOT EXIST YET. The menu opens when the right click
+				// lands, so where the row is can only be asked once that has happened; these two
+				// resolve themselves when they start.
+				Gest to;
+				to.word = "move pointer";
+				to.act = Gest::MENU_MOVE;
+				to.arg = s.arg;
+				gests.push_back(to);
+
+				Gest pick;
+				pick.word = "left click";
+				pick.act = Gest::CLICK_HERE;
+				gests.push_back(pick);
+			}
+			break;
+		}
+
+		case Step::SET: {
+			if (a.paramId < 0) {
+				fail("Step " + std::to_string(index + 1) + ": \"" + s.target
+					+ "\" is not a parameter.");
+				return;
+			}
+			Gest g;
+			g.word = "drag";
+			g.act = Gest::SET_VALUE;
+			g.pos = a.centre();
+			g.glow = a.rect;
+			g.value = s.value;
+			g.target = a;
+			gests.push_back(g);
+			break;
+		}
+
+		case Step::SCROLL: {
+			Gest g;
+			g.word = "scroll wheel";
+			g.act = Gest::WHEEL;
+			g.pos = a.centre();
+			g.glow = a.rect;
+			g.value = s.value;
+			g.target = a;
+			gests.push_back(g);
+			break;
+		}
+
+		case Step::PATCH: {
+			Target b = stage.find(s.target2);
+			if (!b.ok) {
+				fail("Step " + std::to_string(index + 1) + ": " + b.why + ".");
+				return;
+			}
+			if (!onScreen(b.rect)) {
+				fail("Step " + std::to_string(index + 1) + ": \"" + s.target2
+					+ "\" is not on the screen. Frame it first with a zoom step.");
+				return;
+			}
+			if (a.portId < 0 || b.portId < 0) {
+				fail("Step " + std::to_string(index + 1) + ": a patch needs two ports.");
+				return;
+			}
+			checkB = b;
+
+			// A CABLE IS A HELD DRAG, not a click at each end. That is how one is really made
+			// here, and the badge says so.
+			Gest down;
+			down.word = "button down";
+			down.act = Gest::DOWN;
+			down.pos = a.centre();
+			down.glow = a.rect;
+			down.target = a;
+			gests.push_back(down);
+
+			Gest drag;
+			drag.word = "drag";
+			drag.act = Gest::DRAG;
+			drag.pos = b.centre();
+			drag.target = b;
+			gests.push_back(drag);
+
+			Gest up;
+			up.word = "button up";
+			up.act = Gest::UP;
+			up.pos = b.centre();
+			up.glow = b.rect;
+			up.target = b;
+			gests.push_back(up);
+			break;
+		}
+
+		case Step::UNPATCH: {
+			if (a.portId < 0) {
+				fail("Step " + std::to_string(index + 1) + ": \"" + s.target
+					+ "\" is not a port.");
+				return;
+			}
+			checkCount = gCableCount(a);
+
+			Gest down;
+			down.word = "button down";
+			down.act = Gest::DOWN;
+			down.pos = a.centre();
+			down.glow = a.rect;
+			down.target = a;
+			gests.push_back(down);
+
+			// Dropped on bare rack, which is what deletes a cable. Below the port rather than
+			// beside it, because the module's own panel is what is beside it.
+			math::Vec away = a.centre().plus(math::Vec(0.f, 150.f));
+			away.y = std::fmin(away.y, APP->scene->box.size.y - 60.f);
+			Gest drag;
+			drag.word = "drag";
+			drag.act = Gest::DRAG;
+			drag.pos = away;
+			gests.push_back(drag);
+
+			Gest up;
+			up.word = "button up";
+			up.act = Gest::UP;
+			up.pos = away;
+			gests.push_back(up);
+			break;
+		}
+
+		case Step::MOVE_MODULE: {
+			if (!a.mw) {
+				fail("Step " + std::to_string(index + 1) + ": \"" + s.target
+					+ "\" is not a module.");
+				return;
+			}
+			// Dragged by the top of the panel, which is the strip Rack itself treats as the
+			// handle and the one part of a module guaranteed to carry no control.
+			const math::Vec grip(a.rect.pos.x + a.rect.size.x / 2.f, a.rect.pos.y + 8.f);
+			gests[0].pos = grip;
+
+			const float zoom = a.mw->getAbsoluteZoom();
+			const math::Vec to = grip.plus(math::Vec(s.value * RACK_GRID_WIDTH * zoom,
+				s.value2 * RACK_GRID_HEIGHT * zoom));
+
+			Gest down;
+			down.word = "button down";
+			down.act = Gest::DOWN;
+			down.pos = grip;
+			gests.push_back(down);
+
+			Gest drag;
+			drag.word = "drag";
+			drag.act = Gest::DRAG;
+			drag.pos = to;
+			gests.push_back(drag);
+
+			Gest up;
+			up.word = "button up";
+			up.act = Gest::UP;
+			up.pos = to;
+			gests.push_back(up);
+			break;
+		}
+
+		default:
+			break;
+	}
+}
+
+
+bool Runner::verify(const Step& s, std::string* why) {
+	switch (s.kind) {
+		case Step::SET: {
+			const float now = gParamUnit(checkA);
+			if (std::fabs(now - s.value) <= SET_TOLERANCE)
+				return true;
+			*why = "the parameter did not reach the value it was set to";
+			return false;
+		}
+		case Step::PATCH: {
+			// Either way round: an author says "patch this to that" without minding which end is
+			// the output, and Rack does not mind either.
+			const bool ok =
+				gCableExists(checkA.module, checkA.portId, checkB.module, checkB.portId)
+				|| gCableExists(checkB.module, checkB.portId, checkA.module, checkA.portId);
+			if (ok)
+				return true;
+			*why = "no cable was made";
+			return false;
+		}
+		case Step::UNPATCH: {
+			if (gCableCount(checkA) < checkCount)
+				return true;
+			*why = "the cable is still there";
+			return false;
+		}
+		case Step::MENU: {
+			// A menu left standing means the item was never clicked, and the next step would be
+			// performed underneath it.
+			for (widget::Widget* child : APP->scene->children) {
+				ui::MenuOverlay* overlay = dynamic_cast<ui::MenuOverlay*>(child);
+				if (overlay && overlay->visible && !overlay->requestedDelete) {
+					*why = "the menu is still open, so \"" + s.arg + "\" was not chosen";
+					return false;
+				}
+			}
+			return true;
+		}
+		default:
+			return true;
+	}
 }
 
 
@@ -54,20 +579,46 @@ void Runner::begin(int i) {
 		stop();
 		return;
 	}
+	snapshot(i);
 	const Step& s = steps[i];
 	if (!s.note.empty()) {
-		card()->show(s.note, regionFrom(steps, i, scene()));
-		enter(NOTE, pacing.hold);
+		const math::Rect region = regionFor(stage, steps, i);
+		// THE TRANSPORT MOVES FIRST, because it is an opaque window and a click aimed underneath
+		// it would land on it instead — and because the card then chooses its berth against
+		// where the transport has ended up rather than where it was.
+		transportStepAside(region);
+		card()->show(s.note, region);
 	}
-	else {
-		enter(NOTE, 0.f);
-	}
+	expand(s);
+	if (!running)
+		return;   // expand() failed and stopped the run
+	enter(NOTE, s.note.empty() ? 0.f : pacing.hold);
 }
 
 
 void Runner::run() {
 	if (steps.empty())
 		return;
+	failure.clear();
+	armSession();
+
+	// ALWAYS FROM A CLEAN STAGE. A name left bound by the previous run would point at a module
+	// that was deleted when the session went back, and the failure would read as a script error.
+	std::string why;
+	const bool bound = applyBindings(&why);
+	(void) bound;
+	if (!bindings.empty() && !bound) {
+		// A patch step will fix this; without one there is nothing to run against.
+		bool opensAPatch = !patchPath.empty();
+		for (const Step& s : steps)
+			opensAPatch = opensAPatch || s.kind == Step::OPEN || s.kind == Step::ADD;
+		if (!opensAPatch) {
+			failure = why;
+			card()->show("The demo cannot start. " + why, math::Rect());
+			return;
+		}
+	}
+
 	running = true;
 	theatre()->running = true;
 	raiseTheatre();
@@ -79,6 +630,22 @@ void Runner::run() {
 void Runner::stop() {
 	running = false;
 	phase = IDLE;
+
+	// THE BUTTON GOES BACK UP, whatever else happens. A demo stopped between a button-down and
+	// its button-up leaves Rack believing a drag is still in progress, and the half-made cable
+	// then follows the real mouse around the rack — which is not something the viewer can undo
+	// by pressing anything on this window.
+	if (buttonDown) {
+		buttonDown = false;
+		gRelease(theatre() ? theatre()->at() : math::Vec(), GLFW_MOUSE_BUTTON_LEFT);
+	}
+	// And if one is still hanging — a release that landed somewhere Rack did not accept — it is
+	// taken off the rack rather than left for somebody to notice.
+	for (app::CableWidget* cw : APP->scene->rack->getIncompleteCables()) {
+		APP->scene->rack->removeCable(cw);
+		delete cw;
+	}
+
 	if (Theatre* t = theatre()) {
 		t->running = false;
 		t->clear();
@@ -90,33 +657,90 @@ void Runner::restart() {
 	stop();
 	card()->hide();
 	index = 0;
+	failure.clear();
+
+	// THE RACK THE SCRIPT OPENS ON. A script that states a patch starts from it every time, so
+	// two takes are the same take; one that does not starts from whatever is there.
+	if (!patchPath.empty() && system::isFile(patchPath)) {
+		armSession();
+		try {
+			APP->patch->load(patchPath);
+			APP->patch->path = gSessionOwnPath;
+		}
+		catch (Exception& e) {
+			WARN("DreamerDemo: could not open %s: %s", patchPath.c_str(), e.what());
+		}
+	}
+
 	// The pointer starts in the middle rather than wherever the last run abandoned it, so two
 	// takes of the same script open identically.
-	theatre()->placeAt(scene().mult(0.5f));
+	theatre()->placeAt(APP->scene->box.size.mult(0.5f));
 	run();
 }
 
 
-void Runner::perform(int i, bool silent) {
-	// Everything a step does, with none of its waits. Used by Step and Back, where the author is
-	// reading rather than watching.
-	if (i < 0 || i >= (int) steps.size())
-		return;
-	const Step& s = steps[i];
-	if (!s.note.empty())
-		card()->show(s.note, regionFrom(steps, i, scene()));
-	if (s.frac.x >= 0.f)
-		theatre()->placeAt(math::Vec(s.frac.x * scene().x, s.frac.y * scene().y));
-	if (!silent && s.act)
-		theatre()->ripple();
-}
-
-
 void Runner::stepOnce() {
+	// EVERY WAIT COLLAPSED. An author walking a script is reading, not watching, and a sentence
+	// per press would make stepping unusable. The step is performed by running its gestures with
+	// no pauses between them.
 	stop();
-	theatre()->running = true;   // the pointer stays visible while an author walks a script
+	theatre()->running = true;
 	raiseTheatre();
-	perform(index, false);
+	if (index < 0 || index >= (int) steps.size())
+		return;
+
+	snapshot(index);
+	const Step& s = steps[index];
+	if (!s.note.empty())
+		card()->show(s.note, regionFor(stage, steps, index));
+
+	running = true;
+	expand(s);
+	if (!running) {
+		theatre()->running = true;
+		return;
+	}
+	running = false;
+
+	for (size_t k = 0; k < gests.size(); k++) {
+		Gest& g = gests[k];
+		switch (g.act) {
+			case Gest::INSTANT: instant(s); break;
+			case Gest::MOVE: theatre()->placeAt(g.pos); break;
+			case Gest::MENU_MOVE: {
+				math::Rect r;
+				if (findMenuItem(g.arg, &r))
+					theatre()->placeAt(r.pos.plus(r.size.div(2.f)));
+				break;
+			}
+			case Gest::CLICK_L: gClick(g.pos, GLFW_MOUSE_BUTTON_LEFT); break;
+			case Gest::CLICK_R: gClick(g.pos, GLFW_MOUSE_BUTTON_RIGHT); break;
+			case Gest::CLICK_HERE: gClick(theatre()->at(), GLFW_MOUSE_BUTTON_LEFT); break;
+			case Gest::DOWN:
+				gHover(g.pos, math::Vec());
+				gPress(g.pos, GLFW_MOUSE_BUTTON_LEFT);
+				buttonDown = true;
+				break;
+			case Gest::DRAG:
+				theatre()->placeAt(g.pos);
+				gHover(g.pos, math::Vec(1.f, 1.f));
+				break;
+			case Gest::UP:
+				gHover(g.pos, math::Vec());
+				gRelease(g.pos, GLFW_MOUSE_BUTTON_LEFT);
+				buttonDown = false;
+				break;
+			case Gest::SET_VALUE: gSetParam(g.target, g.value); break;
+			case Gest::WHEEL:
+				for (int p = 0; p < WHEEL_PULSES; p++)
+					gScroll(g.pos, math::Vec(0.f, g.value >= 0.f ? 1.f : -1.f));
+				break;
+		}
+	}
+
+	std::string why;
+	if (!verify(s, &why))
+		failure = "Step " + std::to_string(index + 1) + ": " + why + ".";
 	if (index < (int) steps.size() - 1)
 		index++;
 }
@@ -128,76 +752,203 @@ void Runner::back() {
 	raiseTheatre();
 	if (index > 0)
 		index--;
-	// EVERY STEP FROM THE TOP, silently. A step back has to arrive at the state that step left,
-	// and in phase one that state is only where the pointer is and which note is up. Phase three
-	// replaces this with a patch snapshot per step, which is what makes it cheap.
-	for (int i = 0; i <= index; i++)
-		perform(i, true);
+	// A SNAPSHOT PER STEP is what makes going back as cheap as going forward: the patch as it
+	// stood before that step is a file, and restoring it is a load.
+	restoreSnapshot(index);
+	const Step& s = steps[index];
+	if (!s.note.empty())
+		card()->show(s.note, regionFor(stage, steps, index));
+	const Target a = stage.find(s.target);
+	if (a.ok)
+		theatre()->placeAt(a.centre());
+}
+
+
+void Runner::startGest() {
+	Gest& g = gests[gi];
+	theatre()->setBadge("");
+	performStart = system::getTime();
+
+	switch (g.act) {
+		case Gest::MOVE:
+			theatre()->travelTo(g.pos, pacing.perform);
+			enter(PERFORM, pacing.perform);
+			break;
+
+		case Gest::MENU_MOVE: {
+			math::Rect r;
+			if (!findMenuItem(g.arg, &r)) {
+				fail("Step " + std::to_string(index + 1) + ": the menu has no item called \""
+					+ g.arg + "\".");
+				return;
+			}
+			g.pos = r.pos.plus(r.size.div(2.f));
+			g.glow = r;
+			theatre()->travelTo(g.pos, pacing.perform);
+			theatre()->glow(r, pacing.perform + pacing.arrive + pacing.beat);
+			enter(PERFORM, pacing.perform);
+			break;
+		}
+
+		case Gest::DRAG:
+			lastPos = theatre()->at();
+			theatre()->travelTo(g.pos, pacing.perform);
+			enter(PERFORM, pacing.perform);
+			break;
+
+		case Gest::CLICK_L:
+		case Gest::CLICK_HERE:
+			gClick(g.act == Gest::CLICK_HERE ? theatre()->at() : g.pos,
+				GLFW_MOUSE_BUTTON_LEFT);
+			theatre()->ripple();
+			if (g.glow.size.x > 0.f)
+				theatre()->glow(g.glow, 0.9f);
+			enter(PERFORM, PRESS);
+			break;
+
+		case Gest::CLICK_R:
+			gClick(g.pos, GLFW_MOUSE_BUTTON_RIGHT);
+			theatre()->ripple();
+			if (g.glow.size.x > 0.f)
+				theatre()->glow(g.glow, 0.9f);
+			enter(PERFORM, PRESS);
+			break;
+
+		case Gest::DOWN:
+			gHover(g.pos, math::Vec());
+			gPress(g.pos, GLFW_MOUSE_BUTTON_LEFT);
+			buttonDown = true;
+			theatre()->ripple();
+			if (g.glow.size.x > 0.f)
+				theatre()->glow(g.glow, 0.9f);
+			enter(PERFORM, PRESS);
+			break;
+
+		case Gest::UP:
+			gHover(g.pos, math::Vec());
+			gRelease(g.pos, GLFW_MOUSE_BUTTON_LEFT);
+			buttonDown = false;
+			if (g.glow.size.x > 0.f)
+				theatre()->glow(g.glow, 0.9f);
+			enter(PERFORM, PRESS);
+			break;
+
+		case Gest::SET_VALUE:
+			setFrom = gParamUnit(g.target);
+			setTo = g.value;
+			if (g.glow.size.x > 0.f)
+				theatre()->glow(g.glow, pacing.perform + 0.3f);
+			enter(PERFORM, pacing.perform);
+			break;
+
+		case Gest::WHEEL:
+			wheelDone = 0;
+			if (g.glow.size.x > 0.f)
+				theatre()->glow(g.glow, pacing.perform + 0.3f);
+			enter(PERFORM, pacing.perform);
+			break;
+
+		case Gest::INSTANT:
+			instant(steps[index]);
+			if (!running)
+				return;
+			enter(PERFORM, PRESS);
+			break;
+	}
+	performEnd = until;
+}
+
+
+void Runner::nextGest() {
+	gi++;
+	if (gi >= (int) gests.size()) {
+		// The step is done. Ask it whether it did what it said.
+		std::string why;
+		if (!verify(steps[index], &why)) {
+			fail("Step " + std::to_string(index + 1) + ": " + why + ".");
+			return;
+		}
+		enter(SETTLE, pacing.settle + steps[index].wait);
+		gi = (int) gests.size();   // SETTLE now means "the step has ended"
+		return;
+	}
+	if (gests[gi].word.empty()) {
+		// A step with nothing to announce: a zoom, a patch being opened.
+		startGest();
+		return;
+	}
+	theatre()->setBadge(gests[gi].word);
+	enter(ANNOUNCE, pacing.beat);
 }
 
 
 void Runner::tick() {
 	if (!running || phase == IDLE)
 		return;
+
 	const double now = system::getTime();
+
+	// PER-FRAME WORK, which happens whether or not the current pause has run out. A drag is a
+	// stream of movements rather than an event, and a value travels rather than jumping.
+	if (phase == PERFORM && gi >= 0 && gi < (int) gests.size()) {
+		Gest& g = gests[gi];
+		const float span = (float) std::fmax(0.001, performEnd - performStart);
+		const float t = math::clamp((float) ((now - performStart) / span), 0.f, 1.f);
+		if (g.act == Gest::DRAG) {
+			const math::Vec p = theatre()->at();
+			gHover(p, p.minus(lastPos));
+			lastPos = p;
+		}
+		else if (g.act == Gest::MOVE || g.act == Gest::MENU_MOVE) {
+			// A MENU HIGHLIGHTS WHAT THE POINTER IS OVER, and the pointer it believes in is the
+			// last one it was told about. Hovering as the synthetic pointer travels is what puts
+			// the highlight under it rather than under the viewer's real mouse.
+			gHover(theatre()->at(), math::Vec());
+		}
+		else if (g.act == Gest::SET_VALUE) {
+			gSetParam(g.target, setFrom + (setTo - setFrom) * t);
+		}
+		else if (g.act == Gest::WHEEL) {
+			const int want = (int) (t * WHEEL_PULSES);
+			while (wheelDone < want) {
+				gScroll(g.pos, math::Vec(0.f, g.value >= 0.f ? 1.f : -1.f));
+				wheelDone++;
+			}
+		}
+	}
+
 	if (now < until)
 		return;
 
-	const Step& s = steps[index];
-	const math::Vec sc = scene();
-
 	switch (phase) {
 		case NOTE:
-			if (s.frac.x >= 0.f) {
-				theatre()->setBadge("move pointer");
-				enter(ANNOUNCE_MOVE, pacing.beat);
-			}
-			else if (!s.gesture.empty()) {
-				theatre()->setBadge(s.gesture);
-				enter(ANNOUNCE_ACT, pacing.beat);
+			if (gests.empty()) {
+				enter(SETTLE, pacing.settle + steps[index].wait);
+				gi = 0;
 			}
 			else {
-				enter(SETTLE, pacing.settle + s.wait);
+				gi = -1;
+				nextGest();
 			}
 			break;
 
-		case ANNOUNCE_MOVE:
-			theatre()->setBadge("");
-			theatre()->travelTo(math::Vec(s.frac.x * sc.x, s.frac.y * sc.y), pacing.perform);
-			enter(TRAVEL, pacing.perform);
+		case ANNOUNCE:
+			startGest();
 			break;
 
-		case TRAVEL:
-			// WAITS WHERE IT LANDED. This pause is the whole of "announce, then do": the pointer
-			// is on the control and nothing has happened yet, which is the moment the viewer
-			// needs in order to see what is about to be acted on.
-			if (!s.gesture.empty())
-				enter(ARRIVE, pacing.arrive);
-			else
-				enter(SETTLE, pacing.settle + s.wait);
-			break;
-
-		case ARRIVE:
-			theatre()->setBadge(s.gesture);
-			enter(ANNOUNCE_ACT, pacing.beat);
-			break;
-
-		// The badge has had its beat. Now the gesture.
-		case ANNOUNCE_ACT:
-			if (s.act) {
-				theatre()->ripple();
-				if (s.glowFrac.size.x > 0.f) {
-					theatre()->glow(math::Rect(
-						math::Vec(s.glowFrac.pos.x * sc.x, s.glowFrac.pos.y * sc.y),
-						math::Vec(s.glowFrac.size.x * sc.x, s.glowFrac.size.y * sc.y)), 0.9f);
-				}
-			}
-			theatre()->setBadge("");
-			enter(SETTLE, PRESS + pacing.settle + s.wait);
+		case PERFORM:
+			// A MOVE WAITS WHERE IT LANDED. This pause is the whole of "announce, then do": the
+			// pointer is on the control and nothing has happened yet, which is the moment the
+			// viewer needs in order to see what is about to be acted on.
+			enter(SETTLE, (gests[gi].act == Gest::MOVE || gests[gi].act == Gest::MENU_MOVE)
+				? pacing.arrive : pacing.settle);
 			break;
 
 		case SETTLE:
-			begin(index + 1);
+			if (gi >= (int) gests.size())
+				begin(index + 1);
+			else
+				nextGest();
 			break;
 
 		default:

@@ -27,6 +27,7 @@ void Card::show(const std::string& t, math::Rect a) {
 		return;   // the same note again is the same note; do not restart its fade
 	text = t;
 	avoid = a;
+	avoidControls = transportRect();
 	berth = -1;
 	up = true;
 	shownAt = system::getTime();
@@ -66,6 +67,8 @@ math::Rect Card::berthRect(int which, math::Vec size) const {
 
 
 void Card::draw(const DrawArgs& args) {
+	if (!enabled)
+		return;
 	const double now = system::getTime();
 	float alpha = 1.f;
 	if (up)
@@ -96,13 +99,25 @@ void Card::draw(const DrawArgs& args) {
 	if (berth < 0) {
 		berth = (pinned >= 0 && pinned < BERTHS) ? pinned : 0;
 		if (pinned < 0) {
+			// FIRST CHOICE: clear of the action AND clear of the transport. Second choice: clear
+			// of the transport at least, since covering the controls is the one failure that
+			// cannot be recovered from — a note that hides the buttons has no way down.
+			int clearOfBoth = -1, clearOfControls = -1;
 			for (int i = 0; i < BERTHS; i++) {
 				const math::Rect r = berthRect(i, size);
-				if (avoid.size.x <= 0.f || avoid.size.y <= 0.f || !r.intersects(avoid)) {
-					berth = i;
+				const bool overAction = avoid.size.x > 0.f && avoid.size.y > 0.f
+					&& r.intersects(avoid);
+				const bool overControls = avoidControls.size.x > 0.f
+					&& avoidControls.size.y > 0.f && r.intersects(avoidControls);
+				if (!overControls && clearOfControls < 0)
+					clearOfControls = i;
+				if (!overAction && !overControls) {
+					clearOfBoth = i;
 					break;
 				}
 			}
+			berth = (clearOfBoth >= 0) ? clearOfBoth
+				: (clearOfControls >= 0) ? clearOfControls : 0;
 		}
 	}
 
