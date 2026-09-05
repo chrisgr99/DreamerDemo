@@ -242,8 +242,10 @@ Script scriptLoad(const std::string& path) {
 				}
 				s.kind = Step::MENU;
 				s.target = w[1];
+				// Each quoted run is one row to click; an unquoted tail is one row whose words
+				// happen not to need quoting.
 				for (size_t k = 2; k < w.size(); k++)
-					s.arg += (s.arg.empty() ? "" : " ") + w[k];
+					s.path.push_back(w[k]);
 			}
 			else if (verb == "move") {
 				if (w.size() < 4) {

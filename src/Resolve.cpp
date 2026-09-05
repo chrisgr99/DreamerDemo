@@ -145,6 +145,21 @@ Target Stage::find(const std::string& ref) const {
 		return t;
 	}
 
+	// THE CLIP-ON WIDGET JUST PLACED. Like a window, it is not a module and has no name of its
+	// own; unlike a window there may be several, so what can be said about it is that it is the
+	// newest — which during a demo is the one the step before this one made.
+	if (name == "widget") {
+		widget::Widget* w = frontRackWidget();
+		if (!w) {
+			t.why = "nothing is clipped onto the rack";
+			return t;
+		}
+		t.widget = w;
+		t.rect = sceneRect(w);
+		t.ok = true;
+		return t;
+	}
+
 	std::map<std::string, int64_t>::const_iterator it = ids.find(name);
 	if (it == ids.end()) {
 		t.why = "no module bound to the name \"" + name + "\"";

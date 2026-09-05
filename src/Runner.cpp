@@ -624,19 +624,21 @@ void Runner::expand(const Step& s) {
 			gests.push_back(g);
 
 			if (s.kind == Step::MENU) {
-				// THE ITEM'S POSITION DOES NOT EXIST YET. The menu opens when the right click
-				// lands, so where the row is can only be asked once that has happened; these two
-				// resolve themselves when they start.
-				Gest to;
-				to.word = "move pointer";
-				to.act = Gest::MENU_MOVE;
-				to.arg = s.arg;
-				gests.push_back(to);
+				// THE ROWS' POSITIONS DO NOT EXIST YET. A menu opens when the click before it
+				// lands, and the menu after that opens when its row is clicked — so each of
+				// these resolves itself at the moment it starts rather than now.
+				for (size_t k = 0; k < s.path.size(); k++) {
+					Gest to;
+					to.word = "move pointer";
+					to.act = Gest::MENU_MOVE;
+					to.arg = s.path[k];
+					gests.push_back(to);
 
-				Gest pick;
-				pick.word = "left click";
-				pick.act = Gest::CLICK_HERE;
-				gests.push_back(pick);
+					Gest pick;
+					pick.word = "left click";
+					pick.act = Gest::CLICK_HERE;
+					gests.push_back(pick);
+				}
 			}
 			break;
 		}
@@ -841,12 +843,12 @@ bool Runner::verify(const Step& s, std::string* why) {
 			return false;
 		}
 		case Step::MENU: {
-			// A menu left standing means the item was never clicked, and the next step would be
-			// performed underneath it.
+			// A menu left standing means the last row was never clicked, and the next step
+			// would be performed underneath it.
 			for (widget::Widget* child : APP->scene->children) {
 				ui::MenuOverlay* overlay = dynamic_cast<ui::MenuOverlay*>(child);
 				if (overlay && overlay->visible && !overlay->requestedDelete) {
-					*why = "the menu is still open, so \"" + s.arg + "\" was not chosen";
+					*why = "a menu is still open, so the last row was not chosen";
 					return false;
 				}
 			}

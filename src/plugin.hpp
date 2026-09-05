@@ -39,6 +39,14 @@ widget::Widget* frontWindow();
 /** Everything in the scene, named, for when the answer to "no window is open" is not obvious. */
 std::string sceneContents();
 
+/** The thing most recently put on the rack that is neither a module nor a cable — which is to
+say, the widget a demo has just clipped onto a port.
+
+A CLIP-ON WIDGET HAS NO NAME. It is not a module, so none of its controls can be addressed, and
+a demo that can create one but not then press it can only show half of what it is for. What it
+can be told is which one is newest, and during a demo that is the one just made. */
+widget::Widget* frontRackWidget();
+
 /** The narration card and the pointer theatre, created on first use and left in the scene.
 Both are singletons: there is one demo running at a time, by construction. */
 struct Card;

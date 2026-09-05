@@ -49,7 +49,7 @@ struct Step {
 		SCROLL,
 		PATCH,        /**< join `target` to `target2`, either way round */
 		UNPATCH,      /**< pull whatever is on `target` off and drop it */
-		MENU,         /**< right-click, then choose `arg` from the menu that appears */
+		MENU,         /**< right-click, then walk the menu: each name in `path` in turn */
 		MOVE_MODULE,  /**< drag a module by its panel, `value` HP across and `value2` rows down */
 		ZOOM,         /**< frame a module, or the whole rack when `target` is empty */
 		PAN,          /**< move the view without changing how close it is */
@@ -61,7 +61,13 @@ struct Step {
 
 	std::string target;    /**< "name" or "name:control" */
 	std::string target2;   /**< PATCH only */
-	std::string arg;       /**< MENU: the item. OPEN: a path. ADD: "Plugin/Model". */
+	std::string arg;       /**< OPEN: a path. ADD: "Plugin/Model". KEY: the key's name. */
+	/** MENU: the items to click, in order.
+
+	A LIST, NOT ONE NAME. A menu entry often opens another menu, and the thing being reached for
+	is two or three names deep — Test Gear's widgets are behind "Widgets…", and a script that
+	could only click one row could not reach them at all. */
+	std::vector<std::string> path;
 	float value = 0.f;     /**< SET: nought to one across the parameter's range */
 	float value2 = 0.f;
 	float wait = 0.f;      /**< extra pause after the step */

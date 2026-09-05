@@ -65,7 +65,7 @@ The step vocabulary, following DreamRack's:
     scroll <target> [up|down]
     patch <target> -> <target>     either way round
     unpatch <target>               pull the cable off and drop it
-    menu <target> <item>           right click, then choose that item
+    menu <target> <item> [<item>]  right click, then click each row in turn
     move <name> <hp> <rows>        drag a module by its panel
     zoom <name> [factor]           frame a module; `zoom out` frames the whole rack
     pan <name>                     centre on a module without changing how close it is
@@ -73,6 +73,8 @@ The step vocabulary, following DreamRack's:
     open <patch file>              load a patch
     add <Plugin/Model> as <name>   add a module and bind a name to it
     key <name>                     press a key where the pointer is standing
+
+`widget` addresses the clip-on widget most recently put on the rack — which, during a demo, is the one the step before made. Like a window it is not a module and has no name of its own; unlike a window there may be several, so what can be said about it is that it is the newest.
 
 `window` addresses the floating window at the front that belongs to somebody else — a window a module opened, such as the chart's. It has no controls a script could name, because it is not a module, so `window:close` and `window:close-right` reach the corners where a close control lives. Shutting a window by its own cross is what a person does; pressing the button that opened it a second time is not.
 

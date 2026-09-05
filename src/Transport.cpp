@@ -759,6 +759,26 @@ widget::Widget* frontWindow() {
 }
 
 
+widget::Widget* frontRackWidget() {
+	// Newest last, so the list is walked backwards. Modules and cables live in containers of
+	// their own, so anything sitting directly on the rack beside them is somebody's clip-on.
+	for (auto it = APP->scene->rack->children.rbegin();
+		it != APP->scene->rack->children.rend(); it++) {
+		widget::Widget* w = *it;
+		if (!w || !w->visible || w->requestedDelete)
+			continue;
+		if (dynamic_cast<app::ModuleWidget*>(w) || dynamic_cast<app::CableWidget*>(w))
+			continue;
+		// Big enough to be a widget rather than a handle or a close cross, both of which are
+		// added to the rack beside the thing they belong to.
+		if (w->box.size.x < 20.f || w->box.size.y < 20.f)
+			continue;
+		return w;
+	}
+	return NULL;
+}
+
+
 std::string sceneContents() {
 	std::string out;
 	for (widget::Widget* w : APP->scene->children) {
