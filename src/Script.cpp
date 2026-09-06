@@ -11,10 +11,53 @@
 namespace demo {
 
 
+/** THE EXAMPLES, PUT WHERE THEY CAN BE FOUND, once.
+
+A fresh installation has an empty scripts folder, so the picker opens on nothing and there is no
+way in — the one thing a new reader needs is a script to look at and run. The plugin ships its
+own, and copies them out the first time it is asked where scripts live. A file that is already
+there is left alone: these are the user's copies to edit, not ours to keep restoring. */
+static void seedExamples(const std::string& dir) {
+	static bool done = false;
+	if (done)
+		return;
+	done = true;
+
+	struct Pair { const char* from; const char* to; };
+	const Pair pairs[] = {
+		{"scripts", "DreamerDemo/scripts"},
+		{"patches", "DreamerDemo/patches"},
+	};
+	for (size_t k = 0; k < sizeof(pairs) / sizeof(pairs[0]); k++) {
+		const std::string src = asset::plugin(pluginInstance, pairs[k].from);
+		if (!system::isDirectory(src))
+			continue;
+		const std::string dest = asset::user(pairs[k].to);
+		if (!system::isDirectory(dest))
+			system::createDirectories(dest);
+		for (const std::string& path : system::getEntries(src)) {
+			const std::string name = system::getFilename(path);
+			const std::string there = dest + "/" + name;
+			if (system::isFile(there))
+				continue;
+			try {
+				system::copy(path, there);
+				INFO("DreamerDemo: installed the example %s", name.c_str());
+			}
+			catch (Exception& e) {
+				WARN("DreamerDemo: could not install %s: %s", name.c_str(), e.what());
+			}
+		}
+	}
+	(void) dir;
+}
+
+
 std::string scriptDir() {
 	const std::string dir = asset::user("DreamerDemo/scripts");
 	if (!system::isDirectory(dir))
 		system::createDirectories(dir);
+	seedExamples(dir);
 	return dir;
 }
 

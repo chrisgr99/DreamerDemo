@@ -118,13 +118,19 @@ bool speechVoiceExists(const std::string& voice) {
 
 
 int speechRender(const std::vector<std::string>& lines, const std::string& voice, int rate) {
-	// A VOICE THAT IS NOT INSTALLED RENDERS NOTHING, and would do it silently — every line
-	// failing, every note falling back to its written hold, and no sign of why.
-	if (!speechVoiceExists(voice)) {
-		WARN("DreamerDemo: no voice called \"%s\" is installed; nothing will be spoken",
+	// A VOICE THAT IS NOT INSTALLED IS NOT A REASON TO SAY NOTHING.
+	//
+	// A script names the voice it was written for — this one asks for a premium voice that has
+	// to be downloaded — and on any other machine `say` simply fails, line after line, leaving
+	// a demo that runs in silence with all its pauses intact and no sign of why. The system's
+	// own voice is a poorer reading and an entirely usable one, so it is used instead and the
+	// substitution is written down. The file is still stored under the name the script asked
+	// for, so nothing else has to know.
+	const bool named = speechVoiceExists(voice);
+	if (!named)
+		WARN("DreamerDemo: no voice called \"%s\" is installed; using the system voice",
 			voice.c_str());
-		return -1;
-	}
+
 	int made = 0;
 	for (size_t i = 0; i < lines.size(); i++) {
 		if (lines[i].empty())
@@ -137,9 +143,11 @@ int speechRender(const std::vector<std::string>& lines, const std::string& voice
 		// NO DATA FORMAT NAMED. `say` refuses one that its container will not hold, and an AIFF
 		// it chose for itself is about 45 kB a second — which is nothing beside the video, and
 		// this is a cache rather than something that ships.
-		const char* argv[] = {"say", "-v", voice.c_str(), "-r", rateBuf,
+		const char* named_argv[] = {"say", "-v", voice.c_str(), "-r", rateBuf,
 			"-o", path.c_str(), lines[i].c_str(), NULL};
-		if (runAndWait(argv, NULL))
+		const char* plain_argv[] = {"say", "-r", rateBuf,
+			"-o", path.c_str(), lines[i].c_str(), NULL};
+		if (runAndWait(named ? named_argv : plain_argv, NULL))
 			made++;
 	}
 	return made;

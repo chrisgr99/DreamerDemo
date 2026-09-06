@@ -25,7 +25,9 @@ ifneq (,$(findstring -darwin,$(TARGET_MACHINE)))
 	SOURCES += $(wildcard src/*.mm)
 endif
 
-DISTRIBUTABLES += $(wildcard LICENSE*)
+# THE EXAMPLES TRAVEL WITH THE PLUGIN, and are copied into the user's own folder the first time
+# it looks for scripts. Without them a fresh installation opens the picker on nothing at all.
+DISTRIBUTABLES += $(wildcard LICENSE*) scripts patches
 
 include $(RACK_DIR)/plugin.mk
 
@@ -60,6 +62,8 @@ dev: $(TARGET)
 	@cp $(TARGET) "$(PLUGIN_DIR)/plugin.dylib"
 	@cp plugin.json "$(PLUGIN_DIR)/"
 	@cp LICENSE "$(PLUGIN_DIR)/" 2>/dev/null || true
+	@rm -rf "$(PLUGIN_DIR)/scripts" "$(PLUGIN_DIR)/patches"
+	@cp -R scripts patches "$(PLUGIN_DIR)/" 2>/dev/null || true
 	@xattr -c "$(PLUGIN_DIR)/plugin.dylib" 2>/dev/null || true
 	@codesign -v "$(PLUGIN_DIR)/plugin.dylib" && echo "signature valid"
 	@echo "installed to $(PLUGIN_DIR)"

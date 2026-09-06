@@ -10,7 +10,7 @@ Ported from DreamRack, whose `design/scripted-demo.md` describes the same subsys
 
 Not a test framework, though the same machinery would serve as one and the assertions below are the beginning of it.
 
-Not something anyone else installs. It is never submitted to the VCV library. It reads scripts off a local disk, drives the host's interface and runs a command-line program to speak, none of which belongs in a plugin somebody downloads.
+Not a library plugin, and not something anyone else installs from a browser. It is never submitted to the VCV library; the repository is public and anyone who wants it builds it — see README.md, which is the page for that reader, while this one is the page for whoever changes it. It reads scripts off a local disk, drives the host's interface and runs a command-line program to speak, none of which belongs in a plugin somebody downloads.
 
 It **is** a recorder, as of now — see Recording below. It was not at first: ScreenFlow was to record the screen and the computer audio together, and an hour of fighting its permissions and options for something that only ever needed to start and stop with a take settled it.
 
