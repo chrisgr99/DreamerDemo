@@ -69,6 +69,32 @@ This is the chart module. Its chord output carries the tones of the bar.
 ## wait 4
 ```
 
+### The header
+
+Everything above the first step. A key is written between double asterisks; anything the plugin does not recognise is ignored, so notes to yourself are safe. All of it is optional.
+
+| Key | What it does | Default |
+| --- | --- | --- |
+| `# Title` | the first heading of the file, used as the script's name in the picker and in a recording's filename | the filename |
+| `**Patch**` | the patch to open when a run starts, relative to the script | whatever is on the rack |
+| `**Modules**` | the short names the steps use, as `name = Plugin/Model`, separated by commas | none, and a step naming an unbound module fails |
+| `**Voice**` | the macOS voice lines are rendered in | Karen (Premium) |
+| `**Rate**` | words a minute for that voice | 193 |
+| `**Master**` | the parameter pulled down while a line is spoken, as a target — usually an audio interface's level | nothing is ducked |
+| `**Duck**` | how far to pull it down, in decibels | 10 |
+| `**Before**` | parameters to set before the demo starts, as `target = value`, separated by commas | nothing |
+| `**Badges**` | `off` to stop each gesture being named beside the pointer | on |
+| `**Captions**` | `off` to stop the narration also appearing as a card | on |
+| `**Pacing**` | the six timings below, as `name value`, separated by commas | see *Pacing* |
+
+`Modules` binds the **first** module of each model on the rack. A script that needs two of a kind binds the second with an `add … as` step.
+
+`Before` is for the conditions a take needs and nobody should watch being set — turning off a host feature that would interfere, or putting a knob somewhere the demo assumes. The widgets script uses it to switch off Clarity's click-to-patch, which would otherwise pick a cable up when the synthetic pointer presses a jack.
+
+`Master` and `Duck` matter because a recording cannot be rebalanced afterwards: the balance between the patch and the voice has to be right as it is played. The parameter is pulled down while a line sounds and restored the moment it stops. Decibels, because a fraction of a parameter's own range says nothing about how much quieter anything got.
+
+`Badges` and `Captions` are usually both off in a finished script — the narration carries the demonstration, and a caption repeating the voice is noise. They are for authoring, and for a demo watched without sound.
+
 ### Steps
 
 ```
