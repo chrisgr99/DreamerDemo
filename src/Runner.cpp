@@ -1045,6 +1045,9 @@ void Runner::begin(int i) {
 	enter(NOTE, hold);
 	if (spoken > 0.f)
 		until = std::fmax(until, system::getTime() + spoken);
+	// AND A BEAT AFTER IT, so a sentence is not still in the air when the next thing happens.
+	if (!s.note.empty())
+		until += pacing.tail / std::fmax(0.1f, rate);
 }
 
 

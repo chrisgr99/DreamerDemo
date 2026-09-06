@@ -41,6 +41,18 @@ Arming is a standing preference, not part of a run. */
 bool captureArmed();
 void captureArm(bool on);
 
+/** PLAYING A RENDERED LINE, IN THIS PROCESS.
+
+The narration used to be played by afplay, a separate program started once per sentence. The
+system's audio capture does not pick a new process up the instant it starts making a noise, so
+the opening of every recorded take lost its first sentence while Rack's own sound was captured
+perfectly. Played here, the narration IS Rack's sound, and there is nothing to be picked up.
+
+Returns false if the file will not play, in which case nothing is sounding. */
+bool soundPlay(const std::string& path);
+void soundStop();
+bool soundBusy();
+
 /** THE FILE THAT WAS JUST WRITTEN, once, to whoever asks first.
 
 Saying so is not something the recorder can do itself. A take usually ends with Escape, which

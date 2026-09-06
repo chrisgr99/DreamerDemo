@@ -35,6 +35,21 @@ bool captureRunning() {
 }
 
 
+bool soundPlay(const std::string& path) {
+	(void) path;
+	return false;
+}
+
+
+void soundStop() {
+}
+
+
+bool soundBusy() {
+	return false;
+}
+
+
 bool captureArmed() {
 	return false;
 }

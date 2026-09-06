@@ -28,21 +28,25 @@ together, which is the one case where doing it by hand is not a liability. */
 API_AVAILABLE(macos(13.0))
 @interface DemoRecorder : NSObject <SCStreamOutput, SCStreamDelegate> {
 	SCStream* stream;
-	/** A SECOND STREAM, FOR SOUND ALONE.
-	
-	Audio taken alongside a window is that window's application, and half of what a demo makes
-	is spoken by another process altogether — the voice is rendered to a file and played by the
-	system's own player. So the picture comes from Rack's window and the sound comes from a
-	stream filtered on the whole display, which is everything audible: the patch, the narration,
-	and anything else making a noise. Its own video is never collected. */
-	SCStream* audioStream;
 	AVAssetWriter* writer;
 	AVAssetWriterInput* videoIn;
 	AVAssetWriterInput* audioIn;
 	dispatch_queue_t queue;
-	/** The writer cannot be given a sample before it has been told where the recording begins,
-	and the first video frame is what decides that. Audio that arrives before it is dropped. */
+	/** A QUEUE OF ITS OWN FOR THE SOUND. Sharing one with the picture meant a frame being
+	encoded held the audio buffers behind it; the writer was then not ready for them and they
+	were thrown away, which is what a jittering voice is. Sound is small and must never wait
+	for anything. */
+	dispatch_queue_t audioQueue;
+	/** The writer cannot be given a sample before it has been told where the recording begins.
+	THE FIRST SAMPLE OF EITHER KIND decides that — not the first picture. Waiting for a picture
+	threw away every audio buffer that arrived before it, which is the first word or two of the
+	narration whenever the sound stream got going first. The two streams share a clock, so
+	either one can set the origin. */
 	BOOL sessionStarted;
+	/** Signalled when sound is actually flowing, so a take does not begin before the recorder
+	is demonstrably running. */
+	dispatch_semaphore_t soundLive;
+	BOOL soundSeen;
 	BOOL finishing;
 	/** What actually happened, since a recording that fails does so out of sight on a queue of
 	its own: the counts say whether anything ever arrived, and the writer's own status says
@@ -51,6 +55,7 @@ API_AVAILABLE(macos(13.0))
 	int frames;
 	int audioBits;
 	int dropped;
+	int audioDropped;
 	NSString* outPath;
 }
 - (BOOL)startAtPath:(NSString*)path why:(NSString**)why;
@@ -106,12 +111,24 @@ and the file would simply be empty. */
 		return NO;
 	}
 
-	// AT THE SCREEN'S OWN RESOLUTION, so a retina display is recorded at the size it is drawn
-	// rather than at half of it. Even numbers: H.264 will not take an odd dimension.
+	// SHARP, BUT NOT AT ANY PRICE. A retina window is recorded at the size it is drawn, up to
+	// a limit: encoding three thousand pixels across at sixty frames a second is more work than
+	// a machine also running a synthesiser should be asked for, and what it costs is dropped
+	// audio. Beyond the limit the picture is scaled down, which is invisible on a video nobody
+	// will watch at more than about two thousand pixels wide.
+	//
+	// Even numbers throughout: H.264 will not take an odd dimension.
 	NSScreen* screen = [NSScreen mainScreen];
 	const CGFloat scale = screen ? screen.backingScaleFactor : 1.0;
-	const size_t w = ((size_t) (win.frame.size.width * scale)) & ~(size_t) 1;
-	const size_t h = ((size_t) (win.frame.size.height * scale)) & ~(size_t) 1;
+	CGFloat pxW = win.frame.size.width * scale;
+	CGFloat pxH = win.frame.size.height * scale;
+	const CGFloat cap = 2048.0;
+	if (pxW > cap) {
+		pxH *= cap / pxW;
+		pxW = cap;
+	}
+	const size_t w = ((size_t) pxW) & ~(size_t) 1;
+	const size_t h = ((size_t) pxH) & ~(size_t) 1;
 	if (w < 16 || h < 16) {
 		[content release];
 		if (why)
@@ -123,27 +140,24 @@ and the file would simply be empty. */
 	SCStreamConfiguration* cfg = [[SCStreamConfiguration alloc] init];
 	cfg.width = w;
 	cfg.height = h;
-	cfg.minimumFrameInterval = CMTimeMake(1, 60);
+	cfg.minimumFrameInterval = CMTimeMake(1, 30);
 	cfg.pixelFormat = kCVPixelFormatType_32BGRA;
 	// THE POINTER IN THE FILE IS THE DRAWN ONE. A take hides the real cursor and draws its own,
 	// and asking the recorder for the system's would put a second pointer in the picture.
 	cfg.showsCursor = NO;
-	// Not here: this stream's audio would be Rack's alone. See audioStream.
-	cfg.capturesAudio = NO;
+	// RACK'S OWN SOUND, WHICH IS NOW ALL OF IT.
+	//
+	// This used to be off, with a second stream filtered on the whole display doing the sound,
+	// because the narration was spoken by another process. It is played here now, so everything
+	// audible in a take — the patch and the voice — belongs to Rack, and one process tap can
+	// carry it. Taking it from the system-wide tap instead meant our own audio being mixed and
+	// resampled by something else on its way into the file, and the voice arrived jittering
+	// although it sounded perfect as it played.
+	cfg.capturesAudio = YES;
+	cfg.sampleRate = 48000;
+	cfg.channelCount = 2;
 	cfg.queueDepth = 6;
 
-	// The display the window is on, for the sound.
-	SCDisplay* display = nil;
-	for (SCDisplay* d in content.displays) {
-		if (CGRectIntersectsRect(d.frame, win.frame)) {
-			display = d;
-			break;
-		}
-	}
-	if (!display && content.displays.count > 0)
-		display = content.displays[0];
-	SCContentFilter* soundFilter = display
-		? [[SCContentFilter alloc] initWithDisplay:display excludingWindows:@[]] : nil;
 	[content release];
 
 	outPath = [path copy];
@@ -163,7 +177,7 @@ and the file would simply be empty. */
 		AVVideoCodecKey: AVVideoCodecTypeH264,
 		AVVideoWidthKey: @(w),
 		AVVideoHeightKey: @(h),
-		AVVideoCompressionPropertiesKey: @{AVVideoAverageBitRateKey: @(16000000)},
+		AVVideoCompressionPropertiesKey: @{AVVideoAverageBitRateKey: @(12000000)},
 	};
 	videoIn = [[AVAssetWriterInput alloc] initWithMediaType:AVMediaTypeVideo
 		outputSettings:videoSettings];
@@ -193,42 +207,23 @@ and the file would simply be empty. */
 	}
 
 	queue = dispatch_queue_create("com.dreamerdemo.capture", DISPATCH_QUEUE_SERIAL);
+	audioQueue = dispatch_queue_create("com.dreamerdemo.capture.audio", DISPATCH_QUEUE_SERIAL);
 	stream = [[SCStream alloc] initWithFilter:filter configuration:cfg delegate:self];
 	[filter release];
 	[cfg release];
 
+	// THE PICTURE STREAM CARRIES NO SOUND. It was given an audio output as well, which is how
+	// the narration came to be recorded twice: once from this stream, which hears Rack — and
+	// Rack is what plays the narration — and once from the stream below, which hears the whole
+	// machine. Two copies of the same speech a few milliseconds apart is not an echo; it is the
+	// jitter that made every take unusable.
 	if (![stream addStreamOutput:self type:SCStreamOutputTypeScreen
 			sampleHandlerQueue:queue error:&err]
 		|| ![stream addStreamOutput:self type:SCStreamOutputTypeAudio
-			sampleHandlerQueue:queue error:&err]) {
+			sampleHandlerQueue:audioQueue error:&err]) {
 		if (why)
 			*why = err ? err.localizedDescription : @"the stream would not take an output";
 		return NO;
-	}
-
-	if (soundFilter) {
-		SCStreamConfiguration* acfg = [[SCStreamConfiguration alloc] init];
-		acfg.capturesAudio = YES;
-		acfg.sampleRate = 48000;
-		acfg.channelCount = 2;
-		// A stream must carry a picture whether or not anybody collects it, so this one carries
-		// the smallest and slowest picture it will accept. No screen output is added, so those
-		// frames are made and dropped inside the system and never reach us.
-		acfg.width = 160;
-		acfg.height = 120;
-		acfg.minimumFrameInterval = CMTimeMake(1, 1);
-		acfg.queueDepth = 5;
-		audioStream = [[SCStream alloc] initWithFilter:soundFilter configuration:acfg
-			delegate:self];
-		[soundFilter release];
-		[acfg release];
-		if (![audioStream addStreamOutput:self type:SCStreamOutputTypeAudio
-				sampleHandlerQueue:queue error:&err]) {
-			WARN("DreamerDemo capture: no sound: %s",
-				err ? err.localizedDescription.UTF8String : "the stream refused an audio output");
-			[audioStream release];
-			audioStream = nil;
-		}
 	}
 
 	__block BOOL ok = YES;
@@ -244,15 +239,15 @@ and the file would simply be empty. */
 	dispatch_semaphore_wait(started,
 		dispatch_time(DISPATCH_TIME_NOW, (int64_t) (4 * NSEC_PER_SEC)));
 
-	if (ok && audioStream) {
-		dispatch_semaphore_t sound = dispatch_semaphore_create(0);
-		[audioStream startCaptureWithCompletionHandler:^(NSError* e) {
-			if (e)
-				WARN("DreamerDemo capture: no sound: %s", e.localizedDescription.UTF8String);
-			dispatch_semaphore_signal(sound);
-		}];
-		dispatch_semaphore_wait(sound,
-			dispatch_time(DISPATCH_TIME_NOW, (int64_t) (4 * NSEC_PER_SEC)));
+	if (ok) {
+		// SOUND PROVEN TO BE FLOWING BEFORE THE DEMO BEGINS. The streams report themselves
+		// started before they deliver anything, and the first sentence follows within a second
+		// — so a recording that was merely "started" could still miss the opening words. This
+		// waits for the first audio buffer, which is the only proof that matters.
+		soundLive = dispatch_semaphore_create(0);
+		if (dispatch_semaphore_wait(soundLive,
+				dispatch_time(DISPATCH_TIME_NOW, (int64_t) (3 * NSEC_PER_SEC))) != 0)
+			WARN("DreamerDemo capture: no sound arrived in three seconds; recording anyway");
 	}
 	if (!ok && why)
 		*why = startWhy ? [startWhy autorelease] : @"the recording would not start";
@@ -261,26 +256,29 @@ and the file would simply be empty. */
 
 - (void)stream:(SCStream*)s didOutputSampleBuffer:(CMSampleBufferRef)sb
 	ofType:(SCStreamOutputType)type {
-	(void) s;
 	if (finishing || !sb || !CMSampleBufferIsValid(sb) || !CMSampleBufferDataIsReady(sb))
 		return;
 	if (writer.status != AVAssetWriterStatusWriting)
 		return;
 
 	if (type == SCStreamOutputTypeScreen) {
+		@synchronized(self) {
+			if (!sessionStarted) {
+				[writer startSessionAtSourceTime:CMSampleBufferGetPresentationTimeStamp(sb)];
+				sessionStarted = YES;
+			}
+		}
 		// A FRAME THE SYSTEM CALLS COMPLETE. It also sends frames marked idle — nothing on
-		// screen changed — which carry no image and would be written as a black one.
+		// screen changed — which carry no image and would be written as a black one. This is
+		// asked AFTER the session has begun: an idle frame still carries a good timestamp, and
+		// refusing to start on one was throwing away the sound that came before the first
+		// picture worth keeping.
 		NSArray* attachments = (NSArray*) CMSampleBufferGetSampleAttachmentsArray(sb, NO);
 		if (attachments.count > 0) {
 			NSDictionary* first = attachments[0];
 			NSNumber* status = first[SCStreamFrameInfoStatus];
 			if (status && status.intValue != SCFrameStatusComplete)
 				return;
-		}
-		const CMTime pts = CMSampleBufferGetPresentationTimeStamp(sb);
-		if (!sessionStarted) {
-			[writer startSessionAtSourceTime:pts];
-			sessionStarted = YES;
 		}
 		if (!videoIn.isReadyForMoreMediaData) {
 			dropped++;
@@ -297,10 +295,23 @@ and the file would simply be empty. */
 		return;
 	}
 
-	// Audio before the first frame has nowhere to go: the recording does not begin until the
-	// session does, and the session begins at the first picture.
-	if (sessionStarted && audioIn.isReadyForMoreMediaData && [audioIn appendSampleBuffer:sb])
+	// Sound can be the thing that starts the recording, and often is. Both kinds arrive on
+	// queues of their own now, so the one decision they share is made under a lock.
+	@synchronized(self) {
+		if (!sessionStarted) {
+			[writer startSessionAtSourceTime:CMSampleBufferGetPresentationTimeStamp(sb)];
+			sessionStarted = YES;
+		}
+	}
+	if (!audioIn.isReadyForMoreMediaData || ![audioIn appendSampleBuffer:sb])
+		audioDropped++;
+	else
 		audioBits++;
+	if (!soundSeen) {
+		soundSeen = YES;
+		if (soundLive)
+			dispatch_semaphore_signal(soundLive);
+	}
 }
 
 - (void)stream:(SCStream*)s didStopWithError:(NSError*)error {
@@ -311,24 +322,24 @@ and the file would simply be empty. */
 - (void)stop {
 	finishing = YES;
 
-	SCStream* both[2] = {stream, audioStream};
-	for (int i = 0; i < 2; i++) {
-		if (!both[i])
-			continue;
+	if (stream) {
 		dispatch_semaphore_t done = dispatch_semaphore_create(0);
-		[both[i] stopCaptureWithCompletionHandler:^(NSError* e) {
+		[stream stopCaptureWithCompletionHandler:^(NSError* e) {
 			(void) e;
 			dispatch_semaphore_signal(done);
 		}];
 		dispatch_semaphore_wait(done,
 			dispatch_time(DISPATCH_TIME_NOW, (int64_t) (4 * NSEC_PER_SEC)));
 	}
-	// Anything already handed to the queue finishes before the inputs are closed.
+	// Anything already handed to either queue finishes before the inputs are closed.
 	if (queue)
 		dispatch_sync(queue, ^{});
+	if (audioQueue)
+		dispatch_sync(audioQueue, ^{});
 
-	INFO("DreamerDemo capture: %d frames, %d audio buffers, %d dropped, writer status %ld",
-		frames, audioBits, dropped, writer ? (long) writer.status : -1L);
+	INFO("DreamerDemo capture: %d frames (%d dropped), %d audio buffers (%d dropped), "
+		"writer status %ld", frames, dropped, audioBits, audioDropped,
+		writer ? (long) writer.status : -1L);
 	if (writer && writer.status != AVAssetWriterStatusWriting && writer.error)
 		WARN("DreamerDemo capture: the writer had already failed: %s",
 			writer.error.localizedDescription.UTF8String);
@@ -365,8 +376,6 @@ and the file would simply be empty. */
 
 	[stream release];
 	stream = nil;
-	[audioStream release];
-	audioStream = nil;
 	[videoIn release];
 	videoIn = nil;
 	[audioIn release];
@@ -377,8 +386,17 @@ and the file would simply be empty. */
 		dispatch_release(queue);
 		queue = nil;
 	}
+	if (audioQueue) {
+		dispatch_release(audioQueue);
+		audioQueue = nil;
+	}
 	sessionStarted = NO;
 	finishing = NO;
+	soundSeen = NO;
+	if (soundLive) {
+		dispatch_release(soundLive);
+		soundLive = NULL;
+	}
 }
 
 @end
@@ -397,6 +415,91 @@ static unsigned long long gFinishedBytes = 0;
 void captureNoteFinished(const char* path, unsigned long long bytes) {
 	gFinishedPath = path ? path : "";
 	gFinishedBytes = bytes;
+}
+
+
+/** THE NARRATION'S AUDIO PATH, BUILT ONCE AND LEFT UP.
+
+Two ways of playing a rendered line have already failed. A separate program — afplay, started
+once a sentence — lost the opening words of every recording, because the system's audio capture
+does not pick a new process up the instant it makes a noise. Playing it here with AVAudioPlayer
+put the words back and made the voice jitter, because that builds and tears down an audio path
+inside the very process being captured, once per sentence, and what the capture hears while that
+happens is not what was played.
+
+So the path is built once: an engine and a player node, started when the first line is spoken and
+left running for the life of Rack. Each line is scheduled onto the node that is already there.
+Nothing starts, nothing stops, and the capture hears one continuous stream.
+
+The format is taken from the first file. Every line in a script is rendered by the same voice at
+the same rate, so they all match; a file that does not is reconnected for, which is the one case
+that stops the engine briefly. */
+static AVAudioEngine* gEngine = nil;
+static AVAudioPlayerNode* gNode = nil;
+static AVAudioFormat* gFormat = nil;
+
+
+static bool soundEnsure(AVAudioFormat* want) {
+	if (gEngine && gFormat && [gFormat isEqual:want])
+		return true;
+
+	if (!gEngine) {
+		gEngine = [[AVAudioEngine alloc] init];
+		gNode = [[AVAudioPlayerNode alloc] init];
+		[gEngine attachNode:gNode];
+	}
+	else {
+		[gNode stop];
+		[gEngine stop];
+		[gEngine disconnectNodeOutput:gNode];
+	}
+
+	[gEngine connect:gNode to:gEngine.mainMixerNode format:want];
+	[gFormat release];
+	gFormat = [want retain];
+
+	NSError* err = nil;
+	if (![gEngine startAndReturnError:&err]) {
+		WARN("DreamerDemo: cannot start the audio engine: %s",
+			err ? err.localizedDescription.UTF8String : "unknown");
+		return false;
+	}
+	return true;
+}
+
+
+bool soundPlay(const std::string& path) {
+	NSURL* url = [NSURL fileURLWithPath:[NSString stringWithUTF8String:path.c_str()]];
+	NSError* err = nil;
+	AVAudioFile* file = [[AVAudioFile alloc] initForReading:url error:&err];
+	if (!file) {
+		WARN("DreamerDemo: cannot read %s: %s", path.c_str(),
+			err ? err.localizedDescription.UTF8String : "unknown");
+		return false;
+	}
+	if (!soundEnsure(file.processingFormat)) {
+		[file release];
+		return false;
+	}
+
+	// Stopping the node clears what it was playing without touching the engine, so the output
+	// unit underneath keeps running between one sentence and the next.
+	[gNode stop];
+	[gNode scheduleFile:file atTime:nil completionHandler:nil];
+	[gNode play];
+	[file release];
+	return true;
+}
+
+
+void soundStop() {
+	if (gNode)
+		[gNode stop];
+}
+
+
+bool soundBusy() {
+	return gNode && gNode.isPlaying;
 }
 
 

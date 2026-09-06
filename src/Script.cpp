@@ -420,6 +420,7 @@ Script scriptLoad(const std::string& path) {
 					else if (w[0] == "beat") sc.pacing.beat = f;
 					else if (w[0] == "settle") sc.pacing.settle = f;
 					else if (w[0] == "hold") sc.pacing.hold = f;
+					else if (w[0] == "tail") sc.pacing.tail = f;
 				}
 			}
 			continue;

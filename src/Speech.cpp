@@ -1,4 +1,5 @@
 #include "Speech.hpp"
+#include "Capture.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -20,7 +21,6 @@ static std::map<std::string, float> gLength;
 
 /** The process that is speaking, and when it will finish. Kept so it can be silenced and so the
 ducking knows whether anything is being said. */
-static pid_t gSpeaking = 0;
 static double gSpeakingUntil = 0.0;
 
 
@@ -166,41 +166,36 @@ float speechPlay(const std::string& text, const std::string& voice, int rate) {
 	if (seconds <= 0.f)
 		return 0.f;
 
-	// NOTHING WAITS ON THE PROCESS. The length is already known, so the runner works to that and
-	// the frame is never blocked by a program starting.
+	// PLAYED IN THIS PROCESS, not by afplay.
+	//
+	// A separate program is the obvious way to play a file and it cost every recording its first
+	// sentence: the system's audio capture does not pick up a process the moment it starts
+	// making a noise, so the narration was missing from the front of a take while Rack's own
+	// sound was there throughout. Played here it is Rack's own sound, and nothing has to be
+	// noticed by anything.
+	//
+	// Nothing waits on it either. The length is already known, so the runner works to that and
+	// no frame is blocked.
 	const std::string path = pathFor(text, voice, rate);
-	const char* argv[] = {"afplay", path.c_str(), NULL};
-	pid_t pid = 0;
-	if (::posix_spawnp(&pid, argv[0], NULL, NULL, (char* const*) argv, environ) != 0)
+	if (!soundPlay(path))
 		return 0.f;
-	gSpeaking = pid;
 	gSpeakingUntil = system::getTime() + seconds;
 	return seconds;
 }
 
 
 void speechSilence() {
-	if (!gSpeaking)
-		return;
-	::kill(gSpeaking, SIGTERM);
-	int status = 0;
-	::waitpid(gSpeaking, &status, 0);
-	gSpeaking = 0;
+	soundStop();
 	gSpeakingUntil = 0.0;
 }
 
 
 bool speechSounding() {
-	if (!gSpeaking)
+	if (gSpeakingUntil <= 0.0)
 		return false;
-	if (system::getTime() < gSpeakingUntil)
+	if (system::getTime() < gSpeakingUntil && soundBusy())
 		return true;
-	// Finished on its own. Reaped here rather than left as a zombie for the life of Rack.
-	int status = 0;
-	if (::waitpid(gSpeaking, &status, WNOHANG) != 0) {
-		gSpeaking = 0;
-		gSpeakingUntil = 0.0;
-	}
+	gSpeakingUntil = 0.0;
 	return false;
 }
 

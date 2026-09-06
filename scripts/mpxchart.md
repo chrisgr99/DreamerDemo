@@ -7,7 +7,7 @@
 **Captions** off
 **Master** audio:Level
 **Duck** 10 dB
-**Before** clarity:Add and move = 0
+**Before** clarity:Click to add and move cables = 0
 **Pacing** perform 0.7, arrive 0.5, beat 0.4, settle 0.5, hold 0.5
 
 ## zoom chart 1.4

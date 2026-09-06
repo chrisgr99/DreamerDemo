@@ -31,6 +31,13 @@ struct Pacing {
 	float beat = 0.7f;      /**< how long the badge is up before the gesture fires */
 	float settle = 0.6f;    /**< the pause after a gesture, before the next one */
 	float hold = 2.4f;      /**< how long a new note stays up before the demo acts on it */
+	/** THE SILENCE AFTER A SENTENCE, before anything else happens.
+
+	A note holds for the longer of its own number and however long its line takes to say — so a
+	line longer than the hold left no gap at all: the last word and the next gesture landed
+	together, and a description of one widget ran straight into the next. This is added to the
+	end whichever of the two won, and it is the only pause that is always there. */
+	float tail = 1.0f;
 };
 
 
