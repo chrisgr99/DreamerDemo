@@ -48,10 +48,21 @@ struct Step {
 		SET,          /**< move a parameter to `value`, a fraction of its own range */
 		SCROLL,
 		PATCH,        /**< join `target` to `target2`, either way round */
+		DRAG_TO,      /**< press on `target`, travel to `target2`, let go there
+
+		ANY TWO PLACES, unlike a patch, which insists on two ports and checks a cable was made.
+		Some of what a module does is only reachable by dragging one part of it onto another —
+		Clarity's scope is retriggered by dragging its trigger strip onto a port — and there is
+		nothing general to check afterwards, so this one takes the author's word for it. */
 		UNPATCH,      /**< pull whatever is on `target` off and drop it */
 		MENU,         /**< right-click, then walk the menu: each name in `path` in turn */
 		MOVE_MODULE,  /**< drag a module by its panel, `value` HP across and `value2` rows down */
-		ZOOM,         /**< frame a module, or the whole rack when `target` is empty */
+		ZOOM,         /**< frame a module, or the whole rack when `target` is empty.
+
+		"zoom <name> start" centres on it at the zoom the TAKE opened with — the framing of the
+		whole rack that the audience has been looking at since the first frame. Some of what a
+		demo says is about the patch rather than about a control, and for that the right framing
+		is the one they already know. */
 		PAN,          /**< move the view without changing how close it is */
 		OPEN,         /**< load a patch file */
 		ADD,          /**< add a module of model `arg` and bind `target` to it */
@@ -158,7 +169,21 @@ private:
 		float value = 0.f;
 		std::string arg;
 		Target target;
+		/** WHAT IT WAS AIMED AT, BY NAME, so it can be looked up again the moment before it is
+		performed. A step's targets are resolved when it is expanded, and the camera may still
+		be easing towards its own destination at that point: the pointer then travels to where
+		the control was rather than where it now is. Resolving twice costs nothing and the
+		second answer is the true one. */
+		std::string ref;
 	};
+
+	/** Looks a gesture's target up again and moves it to where the control is now. */
+	void refresh(Gest& g);
+
+	/** A BREATH BEFORE THE FIRST STEP. Pressing Run and having the demo already talking is
+	startling, and on a recording it leaves no clean frame at the front to cut on. The pointer
+	is up and the rack is settled for a second before anything happens. */
+	double leadIn = 0.0;
 
 	enum Phase { IDLE, NOTE, ANNOUNCE, PERFORM, SETTLE };
 	Phase phase = IDLE;
@@ -209,8 +234,31 @@ private:
 	std::string camPointTarget;
 	math::Vec camPointFrom;
 
+	/** THE VIEW THE RUN STARTED FROM, put back when it stops.
+
+	A demo flies the camera around the rack, and the last thing a script frames is wherever it
+	happened to end — which for this one is the whole rack seen from a long way off. That is not
+	where the viewer was working. The patch comes back when the session is released; the view
+	comes back when the run stops, which is sooner and is the moment it is noticed. */
+	bool haveView = false;
+	float viewZoomWas = 1.f;
+	math::Vec viewCentreWas;
+	/** THE FRAMING THE TAKE OPENED WITH, which is what "zoom <name> start" means.
+
+	Not the same as the view above. That one is the viewer's own, taken before the script's
+	patch replaces the rack, and it is what the view goes back to when the run stops. A script
+	saying "start" means the framing the audience has been looking at since the first frame —
+	the whole of the demo's rack — and using the viewer's instead put the demo somewhere the
+	audience had never seen, close enough that the jack a step was about to press was off the
+	edge of the window. */
+	float openZoom = 0.f;
+	void rememberView();
+	void restoreView();
+
 	/** Aims the camera at a bound in module coordinates, and starts the move. */
 	void camTo(math::Rect bound, float seconds);
+	/** The same, given a centre and a zoom rather than a rectangle to fit. */
+	void camToAt(math::Vec centre, float zoom, float seconds);
 	/** Moves the view to a centre without changing how close it is. */
 	void camCentre(math::Vec centre, float seconds);
 	void camApply(math::Vec centre, float zoom);
@@ -229,6 +277,8 @@ private:
 	void duckDown();
 	void duckUp();
 
+	/** Loads the rack the script opens on, if it names one. */
+	void openPatch();
 	void begin(int i);
 	void enter(Phase p, float seconds);
 	void expand(const Step& s);

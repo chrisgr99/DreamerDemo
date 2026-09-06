@@ -1,5 +1,7 @@
 #include "Script.hpp"
 
+#include <cmath>
+
 #include <algorithm>
 #include <fstream>
 #include <sstream>
@@ -218,19 +220,34 @@ Script scriptLoad(const std::string& path) {
 				}
 				s.kind = Step::SCROLL;
 				s.target = w[1];
-				s.value = (w.size() > 2 && w[2] == "down") ? -1.f : 1.f;
+				// "scroll <target> [up|down] [notches]". A notch is one detent of a wheel, and
+				// how far that moves a control is the control's business: a scope's scales take
+				// a whole notch each, an injector's digits take a fraction of one. One notch
+				// unless the step says otherwise.
+				float turns = 1.f;
+				bool down = false;
+				for (size_t k = 2; k < w.size(); k++) {
+					if (w[k] == "down")
+						down = true;
+					else if (w[k] == "up")
+						down = false;
+					else
+						readValue(w[k], &turns);
+				}
+				s.value = (down ? -1.f : 1.f) * std::fabs(turns);
 			}
-			else if (verb == "patch") {
+			else if (verb == "patch" || verb == "drag") {
 				// "patch a -> b", with the arrow as its own word or stuck to either side.
 				std::string joined;
 				for (size_t k = 1; k < w.size(); k++)
 					joined += (joined.empty() ? "" : " ") + w[k];
 				const size_t arrow = joined.find("->");
 				if (arrow == std::string::npos) {
-					sc.error = "line " + std::to_string(s.line) + ": patch needs \"a -> b\"";
+					sc.error = "line " + std::to_string(s.line) + ": " + verb
+						+ " needs \"a -> b\"";
 					return sc;
 				}
-				s.kind = Step::PATCH;
+				s.kind = (verb == "drag") ? Step::DRAG_TO : Step::PATCH;
 				s.target = trim(joined.substr(0, arrow));
 				s.target2 = trim(joined.substr(arrow + 2));
 			}
@@ -287,7 +304,12 @@ Script scriptLoad(const std::string& path) {
 				s.kind = Step::ZOOM;
 				if (w.size() >= 2 && w[1] != "out") {
 					s.target = w[1];
-					s.value = (w.size() >= 3) ? (float) std::atof(w[2].c_str()) : 2.f;
+					// "start" instead of a factor: centre on it at the zoom the run began at,
+					// which is the one the viewer chose for themselves.
+					if (w.size() >= 3 && w[2] == "start")
+						s.value2 = 1.f;
+					else
+						s.value = (w.size() >= 3) ? (float) std::atof(w[2].c_str()) : 2.f;
 				}
 			}
 			else if (verb == "open") {

@@ -1,4 +1,7 @@
 #include "Runner.hpp"
+#include "Capture.hpp"
+
+#include <cstdlib>
 #include "Theatre.hpp"
 #include "Card.hpp"
 #include "Gesture.hpp"
@@ -18,6 +21,14 @@ static const float PRESS = 0.18f;
 /** How many notches a scroll gesture is made of. One jump is not a wheel being turned; a run of
 small pulses is seen to turn. */
 static const int WHEEL_PULSES = 8;
+
+/** WHAT ONE NOTCH OF A WHEEL IS WORTH, in the units Rack's scroll events carry.
+
+A step says how many notches to turn, because a notch means different things to different
+controls and that is right: a scope's volts per division moves one step per notch, while an
+injector's digits move several. Sending a bare unit per pulse — which is what this did — was
+worth a fifth of one notch in total, so an injector crept and a scope did not move at all. */
+static const float WHEEL_NOTCH = 40.f;
 
 /** How close a parameter has to land to count as having been set. Wider than nothing, because a
 snapped or quantised parameter cannot land anywhere it likes. */
@@ -48,6 +59,18 @@ static std::string sessionPath() {
 demo's file is the one they were working on. */
 static std::string gSessionOwnPath;
 
+/** THE FILE RACK THINKS IT IS EDITING WHILE A DEMO'S RACK IS LOADED.
+
+A demo replaces the rack, and Rack goes on believing it is editing whatever file was open before
+— so Command-S while a script's patch is on the screen would either write the demo's rack over
+the viewer's own patch, or, if they had not saved one, ask for a name.
+
+A script's patch is a file that belongs to the script, and correcting it between takes is an
+ordinary thing to want to do: run the script, see that a knob was in the wrong place, put it
+right, save. So while the demo's rack is up, that file is the one being edited. It goes back to
+the viewer's own file the moment the session is restored. */
+static std::string gDemoPath;
+
 
 void Runner::snapshot(int i) {
 	try {
@@ -66,7 +89,7 @@ void Runner::restoreSnapshot(int i) {
 		return;
 	try {
 		APP->patch->load(path);
-		APP->patch->path = gSessionOwnPath;
+		APP->patch->path = gDemoPath.empty() ? gSessionOwnPath : gDemoPath;
 		std::string why;
 		applyBindings(&why);
 	}
@@ -98,6 +121,7 @@ void Runner::releaseSession() {
 		return;
 	try {
 		APP->patch->load(sessionPath());
+		gDemoPath.clear();
 		APP->patch->path = gSessionOwnPath;
 	}
 	catch (Exception& e) {
@@ -322,6 +346,55 @@ static math::Vec viewCentre() {
 
 
 /** The zoom at which a bound fills the viewport, with the same margin Rack leaves. */
+/** Everything on the rack: the modules, and whatever is clipped to them.
+
+NOT THE RACK'S OTHER CHILDREN. It also carries the background rails and three containers, which
+are finite but enormous — a hundred thousand pixels square — and a frame drawn around one of
+those is the whole patch shrunk into a corner of the window. */
+static bool wholeRackBound(math::Rect* out) {
+	app::RackWidget* rack = APP->scene->rack;
+	if (!rack)
+		return false;
+	math::Rect all;
+	bool any = false;
+	for (app::ModuleWidget* mw : rack->getModules()) {
+		all = any ? all.expand(mw->box) : mw->box;
+		any = true;
+	}
+	for (widget::Widget* child : rack->children) {
+		if (child == rack->getModuleContainer() || child == rack->getCableContainer()
+			|| child == rack->getPlugContainer())
+			continue;
+		if (!child->visible || child->box.size.x <= 0.f || child->box.size.y <= 0.f)
+			continue;
+		if (!std::isfinite(child->box.size.x) || !std::isfinite(child->box.size.y)
+			|| !std::isfinite(child->box.pos.x) || !std::isfinite(child->box.pos.y))
+			continue;
+		// Small things only: every clipped widget is a few tens of pixels across.
+		if (child->box.size.x > 1000.f || child->box.size.y > 1000.f)
+			continue;
+		all = any ? all.expand(child->box) : child->box;
+		any = true;
+	}
+	if (any)
+		*out = all;
+	return any;
+}
+
+
+/** A target's place in RACK coordinates, which is what the camera works in. A target's own
+rectangle is in scene coordinates — where it is drawn on the screen right now — and those two
+differ by exactly the rack's scroll and zoom. */
+static math::Rect rackRect(const Target& t) {
+	app::RackWidget* rack = APP->scene->rack;
+	if (!rack)
+		return t.rect;
+	const float z = std::fmax(0.001f, rack->getAbsoluteZoom());
+	const math::Vec origin = rack->getAbsoluteOffset(math::Vec(0.f, 0.f));
+	return math::Rect(t.rect.pos.minus(origin).div(z), t.rect.size.div(z));
+}
+
+
 static float zoomForBound(math::Rect bound) {
 	app::RackScrollWidget* scroll = APP->scene->rackScroll;
 	if (!scroll)
@@ -334,6 +407,25 @@ static float zoomForBound(math::Rect bound) {
 }
 
 
+void Runner::rememberView() {
+	app::RackScrollWidget* scroll = APP->scene->rackScroll;
+	if (!scroll || haveView)
+		return;
+	viewZoomWas = scroll->getZoom();
+	viewCentreWas = viewCentre();
+	haveView = true;
+}
+
+
+void Runner::restoreView() {
+	if (!haveView)
+		return;
+	haveView = false;
+	camMoving = false;
+	camApply(viewCentreWas, viewZoomWas);
+}
+
+
 void Runner::camApply(math::Vec centre, float zoom) {
 	app::RackScrollWidget* scroll = APP->scene->rackScroll;
 	if (!scroll)
@@ -343,17 +435,22 @@ void Runner::camApply(math::Vec centre, float zoom) {
 }
 
 
-void Runner::camTo(math::Rect bound, float seconds) {
+void Runner::camToAt(math::Vec centre, float zoom, float seconds) {
 	app::RackScrollWidget* scroll = APP->scene->rackScroll;
 	if (!scroll)
 		return;
 	camZoomFrom = scroll->getZoom();
 	camCentreFrom = viewCentre();
-	camZoomTo = math::clamp(zoomForBound(bound), 0.1f, 4.f);
-	camCentreTo = bound.getCenter();
+	camZoomTo = math::clamp(zoom, 0.1f, 4.f);
+	camCentreTo = centre;
 	camStart = system::getTime();
 	camEnd = camStart + std::fmax(0.05f, seconds) / std::fmax(0.1f, rate);
 	camMoving = true;
+}
+
+
+void Runner::camTo(math::Rect bound, float seconds) {
+	camToAt(bound.getCenter(), zoomForBound(bound), seconds);
 }
 
 
@@ -412,31 +509,41 @@ void Runner::instant(const Step& s) {
 	switch (s.kind) {
 		case Step::ZOOM: {
 			if (s.target.empty()) {
-				// THE WHOLE RACK, as the union of what is on it. Asked of the modules rather
+				// THE WHOLE RACK, as the union of what is on it. Asked of the widgets rather
 				// than of Rack's own framing call, so that it eases there rather than cutting.
 				math::Rect all;
-				bool any = false;
-				for (app::ModuleWidget* mw : APP->scene->rack->getModules()) {
-					all = any ? all.expand(mw->box) : mw->box;
-					any = true;
-				}
-				if (!any)
+				if (!wholeRackBound(&all))
 					break;
+				INFO("DreamerDemo: framing the whole rack, (%g,%g %gx%g)",
+					all.pos.x, all.pos.y, all.size.x, all.size.y);
 				camPointTarget.clear();
 				camTo(all, pacing.perform);
 				break;
 			}
 			const Target t = stage.find(s.target);
-			if (!t.ok || !t.mw) {
+			if (!t.ok) {
 				fail("Step " + std::to_string(index + 1) + ": " + t.why + ".");
 				return;
 			}
-			// The module's own box is already in rack coordinates, which is what the camera
-			// takes. A factor above one frames it with less around it.
-			const float f = std::fmax(0.2f, s.value);
-			const math::Vec pad = t.mw->box.size.mult((1.f / f) * 0.5f);
+			// ANYTHING THAT CAN BE ADDRESSED CAN BE FRAMED, not only a module. A demo is
+			// clearer when the thing being talked about is the thing filling the window, and
+			// half of what this plugin demonstrates is smaller than a module: a jack, a knob,
+			// a widget clipped to a port. A factor above one frames it with less around it.
 			camPointFrom = theatre()->at();
-			camTo(t.mw->box.grow(pad), pacing.perform);
+			const math::Rect box = rackRect(t);
+			if (s.value2 > 0.f) {
+				// THE ZOOM THE VIEWER CHOSE. A step that is about the patch rather than about
+				// one control wants the framing they were already using, not one worked out
+				// from the size of the thing being pointed at.
+				camToAt(box.getCenter(), openZoom > 0.f ? openZoom
+					: haveView ? viewZoomWas : APP->scene->rackScroll->getZoom(),
+					pacing.perform);
+			}
+			else {
+				const float f = std::fmax(0.2f, s.value);
+				const math::Vec pad = box.size.mult((1.f / f) * 0.5f);
+				camTo(box.grow(pad), pacing.perform);
+			}
 			camPointTarget = s.target;
 			break;
 		}
@@ -446,11 +553,11 @@ void Runner::instant(const Step& s) {
 			math::Vec want;
 			if (!s.target.empty()) {
 				const Target t = stage.find(s.target);
-				if (!t.ok || !t.mw) {
+				if (!t.ok) {
 					fail("Step " + std::to_string(index + 1) + ": " + t.why + ".");
 					return;
 				}
-				want = t.mw->box.getCenter();
+				want = rackRect(t).getCenter();
 			}
 			else {
 				want = viewCentre().plus(math::Vec(s.value * RACK_GRID_WIDTH,
@@ -468,7 +575,8 @@ void Runner::instant(const Step& s) {
 			}
 			try {
 				APP->patch->load(s.arg);
-				APP->patch->path = gSessionOwnPath;
+				gDemoPath = s.arg;
+				APP->patch->path = gDemoPath;
 			}
 			catch (Exception& e) {
 				fail("Step " + std::to_string(index + 1) + ": " + e.what());
@@ -591,7 +699,11 @@ void Runner::expand(const Step& s) {
 		fail("Step " + std::to_string(index + 1) + ": " + a.why + ".");
 		return;
 	}
-	if (!onScreen(a.rect)) {
+	// NOT WHILE THE CAMERA IS STILL MOVING. A step is expanded as its note goes up, and a view
+	// change started by the step before may still be easing — so a control that is about to be
+	// in the middle of the window can be outside it at the moment the question is asked. Every
+	// gesture looks its target up again before it fires, so being early is not being wrong.
+	if (!camMoving && !onScreen(a.rect)) {
 		fail("Step " + std::to_string(index + 1) + ": \"" + s.target
 			+ "\" is not on the screen. Frame it first with a zoom step.");
 		return;
@@ -605,6 +717,7 @@ void Runner::expand(const Step& s) {
 	move.act = Gest::MOVE;
 	move.pos = a.centre();
 	move.target = a;
+	move.ref = s.target;
 	gests.push_back(move);
 
 	switch (s.kind) {
@@ -621,6 +734,7 @@ void Runner::expand(const Step& s) {
 			g.pos = a.centre();
 			g.glow = a.rect;
 			g.target = a;
+			g.ref = s.target;
 			gests.push_back(g);
 
 			if (s.kind == Step::MENU) {
@@ -668,6 +782,7 @@ void Runner::expand(const Step& s) {
 			g.glow = a.rect;
 			g.value = s.value;
 			g.target = a;
+			g.ref = s.target;
 			gests.push_back(g);
 			break;
 		}
@@ -691,6 +806,43 @@ void Runner::expand(const Step& s) {
 
 			// A CABLE IS A HELD DRAG, not a click at each end. That is how one is really made
 			// here, and the badge says so.
+			Gest down;
+			down.word = "button down";
+			down.act = Gest::DOWN;
+			down.pos = a.centre();
+			down.glow = a.rect;
+			down.target = a;
+			gests.push_back(down);
+
+			Gest drag;
+			drag.word = "drag";
+			drag.act = Gest::DRAG;
+			drag.pos = b.centre();
+			drag.target = b;
+			gests.push_back(drag);
+
+			Gest up;
+			up.word = "button up";
+			up.act = Gest::UP;
+			up.pos = b.centre();
+			up.glow = b.rect;
+			up.target = b;
+			gests.push_back(up);
+			break;
+		}
+
+		case Step::DRAG_TO: {
+			Target b = stage.find(s.target2);
+			if (!b.ok) {
+				fail("Step " + std::to_string(index + 1) + ": " + b.why + ".");
+				return;
+			}
+			if (!onScreen(b.rect)) {
+				fail("Step " + std::to_string(index + 1) + ": \"" + s.target2
+					+ "\" is not on the screen. Frame it first with a zoom step.");
+				return;
+			}
+
 			Gest down;
 			down.word = "button down";
 			down.act = Gest::DOWN;
@@ -896,11 +1048,83 @@ void Runner::begin(int i) {
 }
 
 
+/** THE RACK THE SCRIPT OPENS ON. A script that states a patch starts from it every time, so two
+takes are the same take; one that does not starts from whatever is on the rack.
+
+LOADED WHENEVER A RUN STARTS FROM THE TOP, not only by the Restart button. Pressing Run on a
+freshly chosen script is the ordinary way to begin a take, and it was starting against whatever
+rack happened to be open — which is exactly the thing naming a patch was meant to prevent. */
+void Runner::openPatch() {
+	if (patchPath.empty())
+		return;
+	if (!system::isFile(patchPath)) {
+		WARN("DreamerDemo: there is no patch at %s", patchPath.c_str());
+		return;
+	}
+	armSession();
+	try {
+		APP->patch->load(patchPath);
+		gDemoPath = patchPath;
+		APP->patch->path = gDemoPath;
+		INFO("DreamerDemo: opened %s", patchPath.c_str());
+		// FRAMED AT ONCE, not eased into. The patch that is loaded is not the one the view was
+		// set for, so the first thing a take showed was the new rack half off the top of the
+		// window, sliding into place while the opening sentence was already being spoken.
+		math::Rect all;
+		if (wholeRackBound(&all)) {
+			camMoving = false;
+			openZoom = math::clamp(zoomForBound(all), 0.1f, 4.f);
+			camApply(all.getCenter(), openZoom);
+		}
+	}
+	catch (Exception& e) {
+		WARN("DreamerDemo: could not open %s: %s", patchPath.c_str(), e.what());
+	}
+}
+
+
+/** Where a recording goes: the Downloads folder, named for the script and the moment.
+
+NOT BESIDE THE SCRIPTS. A finished take is not part of the plugin's working material — it is a
+file to be watched, uploaded or thrown away, and it belongs where a person's other finished
+files land rather than buried in an application support folder. Named rather than numbered so
+that a folder of takes can be read. */
+static std::string takePath(const std::string& title) {
+	// Rack has no notion of a home directory, so it comes from the environment, as it does for
+	// every other program.
+	const char* home = std::getenv("HOME");
+	std::string dir = home ? std::string(home) + "/Downloads" : std::string();
+	if (dir.empty() || !system::isDirectory(dir)) {
+		// Somewhere rather than nowhere, if there is no Downloads folder to write to.
+		dir = home ? std::string(home) : system::getTempDirectory();
+	}
+	const time_t now = time(NULL);
+	struct tm parts;
+	localtime_r(&now, &parts);
+	char stamp[32] = {0};
+	std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H.%M.%S", &parts);
+	std::string name = title.empty() ? std::string("demo") : title;
+	// A title is a sentence, and a sentence can carry a slash.
+	for (size_t i = 0; i < name.size(); i++) {
+		if (name[i] == '/' || name[i] == ':')
+			name[i] = '-';
+	}
+	return dir + "/" + name + " " + stamp + ".mp4";
+}
+
+
 void Runner::run() {
 	if (steps.empty())
 		return;
 	failure.clear();
 	armSession();
+
+	// BEFORE THE NAMES ARE BOUND, since every module in the rack is a different object after a
+	// patch is loaded — and only when starting from the top, so that Run after a Stop carries
+	// on with the rack as the demo has built it rather than throwing the take away.
+	rememberView();
+	if (index == 0 && phase == IDLE)
+		openPatch();
 
 	// ALWAYS FROM A CLEAN STAGE. A name left bound by the previous run would point at a module
 	// that was deleted when the session went back, and the failure would read as a script error.
@@ -914,9 +1138,11 @@ void Runner::run() {
 			opensAPatch = opensAPatch || s.kind == Step::OPEN || s.kind == Step::ADD;
 		if (!opensAPatch) {
 			failure = why;
+			WARN("DreamerDemo: the demo cannot start: %s", why.c_str());
 			card()->show("The demo cannot start. " + why, math::Rect());
 			return;
 		}
+		WARN("DreamerDemo: names not bound yet (%s); a patch step should fix it", why.c_str());
 	}
 
 	duckCapture();
@@ -935,14 +1161,36 @@ void Runner::run() {
 	theatre()->running = true;
 	theatre()->live = true;
 	raiseTheatre();
-	if (phase == IDLE)
-		begin(index);
+	INFO("DreamerDemo: run from step %d of %d, %s", index + 1, (int) steps.size(),
+		phase == IDLE ? "starting" : "already under way");
+	if (phase == IDLE) {
+		// STARTED BEFORE THE LEAD-IN, so the second of stillness at the front of a take is in
+		// the file: something to cut on, and proof the recording was running before anything
+		// happened.
+		if (captureArmed() && !captureRunning()) {
+			const std::string path = takePath(title);
+			std::string why;
+			if (captureStart(path, &why)) {
+				INFO("DreamerDemo: recording to %s", path.c_str());
+			}
+			else {
+				WARN("DreamerDemo: not recording: %s", why.c_str());
+				card()->show("Not recording. " + why, math::Rect());
+			}
+		}
+		leadIn = system::getTime() + 1.0;
+	}
 }
 
 
 void Runner::stop() {
 	running = false;
 	phase = IDLE;
+	leadIn = 0.0;
+	// THE FILE CLOSES WITH THE TAKE, whichever way it ended: the last step, a failed check, Stop,
+	// or Escape. There is no other path out of a run, which is what makes this reliable.
+	captureStop();
+	restoreView();
 	// A DEMO THAT STOPS STOPS TALKING, and gives the level back. Leaving a sentence running over
 	// a rack that is no longer doing anything is the one thing a viewer cannot explain.
 	speechSilence();
@@ -987,18 +1235,7 @@ void Runner::restart() {
 	index = 0;
 	failure.clear();
 
-	// THE RACK THE SCRIPT OPENS ON. A script that states a patch starts from it every time, so
-	// two takes are the same take; one that does not starts from whatever is there.
-	if (!patchPath.empty() && system::isFile(patchPath)) {
-		armSession();
-		try {
-			APP->patch->load(patchPath);
-			APP->patch->path = gSessionOwnPath;
-		}
-		catch (Exception& e) {
-			WARN("DreamerDemo: could not open %s: %s", patchPath.c_str(), e.what());
-		}
-	}
+	openPatch();
 
 	// The pointer starts in the middle rather than wherever the last run abandoned it, so two
 	// takes of the same script open identically.
@@ -1063,7 +1300,7 @@ void Runner::stepOnce() {
 			case Gest::SET_VALUE: gSetParam(g.target, g.value); break;
 			case Gest::WHEEL:
 				for (int p = 0; p < WHEEL_PULSES; p++)
-					gScroll(g.pos, math::Vec(0.f, g.value >= 0.f ? 1.f : -1.f));
+					gScroll(g.pos, math::Vec(0.f, g.value * WHEEL_NOTCH / WHEEL_PULSES));
 				break;
 		}
 	}
@@ -1094,8 +1331,30 @@ void Runner::back() {
 }
 
 
+/** LOOKED UP AGAIN, THE MOMENT BEFORE IT IS USED.
+
+A step resolves its targets when it is expanded, and the camera may still be easing towards its
+own destination at that point — so the pointer set off for where the control was and arrived
+where it no longer is. Everything on the rack moves when the view moves, which is most of a demo;
+resolving twice costs nothing, and the second answer is the true one. A lookup that fails is
+ignored rather than fatal: the first answer is still there, and the step's own check will say so
+if it was wrong. */
+void Runner::refresh(Gest& g) {
+	if (g.ref.empty())
+		return;
+	const Target now = stage.find(g.ref);
+	if (!now.ok)
+		return;
+	g.target = now;
+	g.pos = now.centre();
+	if (g.glow.size.x > 0.f)
+		g.glow = now.rect;
+}
+
+
 void Runner::startGest() {
 	Gest& g = gests[gi];
+	refresh(g);
 	theatre()->setBadge("");
 	performStart = system::getTime();
 
@@ -1215,6 +1474,9 @@ void Runner::startGest() {
 
 		case Gest::WHEEL:
 			wheelDone = 0;
+			gHover(g.pos, math::Vec());
+			INFO("DreamerDemo step %d: scroll %g notches at (%g,%g), under it: %s",
+				index + 1, g.value, g.pos.x, g.pos.y, gHoveredName().c_str());
 			if (g.glow.size.x > 0.f)
 				theatre()->glow(g.glow, pacing.perform + 0.3f);
 			enter(PERFORM, pacing.perform);
@@ -1255,12 +1517,39 @@ void Runner::nextGest() {
 
 
 void Runner::tick() {
-	if (!running || phase == IDLE)
+	if (!running)
+		return;
+
+	// THE POINTER IS ASSERTED EVERY FRAME, not only while a gesture is travelling.
+	//
+	// Rack tells the scene where the mouse is whenever it hears from the operating system, and
+	// anything that asks the scene — a widget riding the pointer until a click puts it down, a
+	// menu deciding which row is under it — believes the last thing it was told. Hovering only
+	// during a gesture left every frame in between reporting the viewer's real cursor, so a
+	// newly made widget sat wherever their hand was resting until the pointer set off for it.
+	if (theatre()->live)
+		gHover(theatre()->at(), math::Vec());
+
+	const double now = system::getTime();
+
+	// THE SECOND BETWEEN PRESSING RUN AND THE DEMO STARTING. Nothing else happens in it.
+	//
+	// BEFORE THE IDLE TEST, not after. A run that has not begun its first step is idle by every
+	// other measure, and the test below is what stops an idle runner doing work — so putting the
+	// wait behind it left the demo running, with the pointer hidden and the cursor gone, and
+	// nothing that could ever start it. Escape was the only way out.
+	if (leadIn > 0.0) {
+		if (now < leadIn)
+			return;
+		leadIn = 0.0;
+		begin(index);
+		return;
+	}
+
+	if (phase == IDLE)
 		return;
 
 	camTick();
-
-	const double now = system::getTime();
 
 	// THE LEVEL COMES BACK THE MOMENT THE VOICE STOPS, not at the end of the step. A note holds
 	// for as long as its sentence takes and often longer, and the patch should be at full level
@@ -1291,7 +1580,7 @@ void Runner::tick() {
 		else if (g.act == Gest::WHEEL) {
 			const int want = (int) (t * WHEEL_PULSES);
 			while (wheelDone < want) {
-				gScroll(g.pos, math::Vec(0.f, g.value >= 0.f ? 1.f : -1.f));
+				gScroll(g.pos, math::Vec(0.f, g.value * WHEEL_NOTCH / WHEEL_PULSES));
 				wheelDone++;
 			}
 		}

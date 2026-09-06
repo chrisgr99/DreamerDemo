@@ -12,7 +12,7 @@ Not a test framework, though the same machinery would serve as one and the asser
 
 Not something anyone else installs. It is never submitted to the VCV library. It reads scripts off a local disk, drives the host's interface and runs a command-line program to speak, none of which belongs in a plugin somebody downloads.
 
-Not a recorder. ScreenFlow records the screen and the computer audio together; nothing here captures anything.
+It **is** a recorder, as of now — see Recording below. It was not at first: ScreenFlow was to record the screen and the computer audio together, and an hour of fighting its permissions and options for something that only ever needed to start and stop with a take settled it.
 
 ## Its own plugin
 
@@ -64,21 +64,31 @@ The step vocabulary, following DreamRack's:
     set <target> <value>           a fraction, a percentage, or a word
     scroll <target> [up|down]
     patch <target> -> <target>     either way round
+    drag <target> -> <target>      press on one, let go on the other
     unpatch <target>               pull the cable off and drop it
     menu <target> <item> [<item>]  right click, then click each row in turn
     move <name> <hp> <rows>        drag a module by its panel
-    zoom <name> [factor]           frame a module; `zoom out` frames the whole rack
+    zoom <name> [factor|start]     frame a module; `start` uses the take's opening framing
+    zoom out                       frame the whole rack and whatever is clipped to it
     pan <name>                     centre on a module without changing how close it is
     pan <hp> <rows>                move the view by that much
     open <patch file>              load a patch
     add <Plugin/Model> as <name>   add a module and bind a name to it
     key <name>                     press a key where the pointer is standing
 
-`widget` addresses the clip-on widget most recently put on the rack — which, during a demo, is the one the step before made. Like a window it is not a module and has no name of its own; unlike a window there may be several, so what can be said about it is that it is the newest.
+`widget` addresses a clip-on widget. Like a window it is not a module and has no name of its own, so there are three ways to say which: `widget` alone is the one most recently put on the rack, which during a demo is the one the step before made; `widget:vco:out:#1` is the one clipped to that port, which is how a demo talks about a rack that already carries them; and `widget:vco:out:#1/close` is its close cross, which is how a person takes one off.
+
+The second is found by **asking the plugin that made it**. A clip-on widget is an ordinary rack child with no name and no port of its own, and guessing by distance does not work — two outputs on a module are thirty pixels apart and a widget sits sixty pixels from its own jack, so the nearest port to a widget is regularly the wrong one. But the plugin that owns them writes the module, the port and the offset into its own patch data, and a module's JSON can be asked for at any time: a clip's position is its port's centre plus that offset, so it can be identified by where it must be. This works only for a plugin that publishes its widgets that way, which today means Test Gear, and that is honest — a demo cannot point at another plugin's floating furniture unless that plugin says where it put it.
+
+A demo that starts from a rack which already carries its widgets is better than one that builds them: adding a widget is one gesture repeated, watching it six times teaches nothing after the first, and every addition is another chance to place something badly on camera. Build one, on camera, once.
 
 `window` addresses the floating window at the front that belongs to somebody else — a window a module opened, such as the chart's. It has no controls a script could name, because it is not a module, so `window:close` and `window:close-right` reach the corners where a close control lives. Shutting a window by its own cross is what a person does; pressing the button that opened it a second time is not.
 
-`name@across,down` names a **place on a panel**, as fractions of its width and height — `chart@50%,12%`. It is for what a module draws itself: a readout is neither a parameter nor a port, so nothing about it can be addressed by name, yet the title in mpxChart's readout is the way to another song and a demo that cannot press it cannot show that. It is a last resort and reads like one, since a fraction is a guess about a layout that could change. Where a control has a name, use the name.
+`name@across,down` names a **place on a panel**. It is for what a module draws itself: a readout is neither a parameter nor a port, so nothing about it can be addressed by name, yet the title in mpxChart's readout is the way to another song and a demo that cannot press it cannot show that.
+
+There are two ways of saying where, because panels are laid out in two ways. A percentage is a fraction of the side — `chart@50%,12%` — which suits a panel laid out proportionally. A plain number is pixels in from the left or the top, and a negative number is pixels in from the right or the bottom — `widget@30,9`, `widget@-14,9`. That suits a control pinned a fixed distance from an edge, which is how Clarity's scope carries its row of buttons; since the scope can be resized to any size at all, no fraction names one of those twice running. Pixels are the widget's own, so a rack zoomed in or out does not move the target.
+
+Either way it is a last resort and reads like one, since it is a guess about a layout that could change. Where a control has a name, use the name.
 
 A target is `name` for the module itself or `name:control` for one of its controls, where the control is a parameter's or a port's own name. `in:` and `out:` in front of it force the side, and `#3` addresses one by number for a module that names nothing.
 
@@ -102,9 +112,25 @@ It is generated from the step, never authored. An author writes "patch this to t
 
 Two notes on the expansion. Patching in Rack is a held drag from one port to another, not a click at each end, so it expands to a button-down and a button-up with a move between. And a knob is a drag rather than a wheel, so a value change shows as button down, a slow travel, button up — with the badge saying `drag`.
 
+`drag` is that same expansion between any two places rather than two ports. Some of what a module does is only reachable by dragging one part of it onto another — Clarity's scope is retriggered by dragging its trigger strip onto a port — and unlike a patch there is nothing general to check afterwards, so this one step takes the author's word that it worked.
+
+## Recording
+
+A take records itself. Arm **Record** on the module's panel and the next run opens an MP4 when it starts and closes it when it stops — at the last step, at a failed check, at Stop, or at Escape. There is no other way out of a run, which is what makes it exact: the file needs no trimming, which is the part of making a video that is hardest to do by eye.
+
+It records **Rack's own window**, at the screen's own resolution, with the system's audio in the same file — so the narration and the patch arrive together and already in sync. The pointer in the file is the drawn one, because a take hides the real cursor and the recorder is told not to draw one.
+
+It is **macOS only**, through ScreenCaptureKit, and says so plainly everywhere else. The permission belongs to Rack rather than to a helper: granted once in System Settings, under Privacy and Security, Screen Recording, and Rack restarted afterwards. Until it is granted, Rack's own window is simply not offered to us — which is the failure the message names, since nothing else about the request fails and the file would otherwise be empty.
+
+The file goes in your **Downloads** folder, named for the script and the moment. A finished take is not part of the plugin's working material — it is something to watch, upload or throw away — so it lands where a person's other finished files land rather than inside an application support folder.
+
+Building it into the plugin rather than shipping a recorder alongside it means one permission rather than two, nothing to sign or find on disk, and start and stop called from the same two places that already start and stop a take — so it cannot drift out of step with the run.
+
 ## The theatre
 
 A widget added to the scene, above everything, taking no events. It draws the pointer, the badge, a ripple at each click, and a brief glow on the control being acted on. Rack draws its own cursor through the operating system, so the real one is hidden for the length of a take with a single GLFW call.
+
+**The real cursor is hidden but never moved.** An injected hover tells Rack's event system where the pointer is, which is enough for anything that waits to be told — a highlighted menu row, a hovered jack. Not everything waits to be told: a widget that rides the pointer until a click puts it down may ask the operating system where the real cursor is, and one made during a demo was then laid down wherever the viewer's hand had left their mouse. Warping the real cursor under the drawn one fixes that and costs too much: it takes the viewer's mouse away from them for the length of a take, and a run that cannot be reached with the real pointer is worse than the fault it cures. The answer is on the other side — anything of ours that needs the pointer asks the scene, which is what injected hovers set.
 
 The card is one text place floating over the rack rather than docked beside it, because docking would take space from the thing being demonstrated. It is placed, not dragged: the runner knows every step's target in advance, works out the region the coming steps will touch, and gives the card a berth clear of it. The berth is chosen once per note and does not move while that note is up.
 

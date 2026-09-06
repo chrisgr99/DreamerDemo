@@ -14,6 +14,9 @@ costs a viewer nothing.
 #include "Script.hpp"
 #include "Speech.hpp"
 #include "Picker.hpp"
+#include "Capture.hpp"
+
+#include <patch.hpp>
 
 #include <osdialog.h>
 
@@ -25,19 +28,36 @@ namespace demo {
 
 
 static const float T_TITLE = 22.f;
-static const float T_W = 1054.f;
 static const float T_H = 76.f;
+
 static const float BTN_H = 30.f;
 static const float BTN_Y = T_TITLE + 12.f;
 static const float BTN_GAP = 8.f;
 static const float BTN_PAD = 12.f;
 
-enum Button { B_SCRIPT, B_RELOAD, B_RUN, B_RESTART, B_BACK, B_STEP, B_RATE, B_VOICE,
-	B_BADGES, B_CAPTIONS, B_HIDE, B_COUNT };
+enum Button { B_SCRIPT, B_RELOAD, B_PATCH, B_RUN, B_RESTART, B_BACK, B_STEP, B_RATE, B_VOICE,
+	B_BADGES, B_CAPTIONS, B_RECORD, B_HIDE, B_COUNT };
 static const float BTN_W[B_COUNT] =
-	{224.f, 74.f, 74.f, 86.f, 62.f, 62.f, 92.f, 66.f, 78.f, 92.f, 62.f};
+	{224.f, 74.f, 66.f, 74.f, 86.f, 62.f, 62.f, 92.f, 66.f, 78.f, 92.f, 80.f, 62.f};
+
+/** THE WINDOW IS THE RUNNER, NOT THE WORKBENCH.
+
+Setting a demo up — choosing a script, reloading it, rendering the voice, deciding whether the
+badges are on — is done while the rack is sitting still, and it belongs on the module's panel
+where it has a permanent place. Driving a take is a different job with one requirement: never
+move, never hide, always reachable. That is three buttons, and a window small enough to sit in
+a corner and be framed out of a recording. */
+static const int WIN_BTNS[] = {B_RUN, B_BACK, B_STEP};
+static const int WIN_COUNT = (int) (sizeof(WIN_BTNS) / sizeof(WIN_BTNS[0]));
 
 static const float RATES[4] = {0.75f, 1.0f, 1.5f, 2.0f};
+
+static float winWidth() {
+	float w = BTN_PAD;
+	for (int k = 0; k < WIN_COUNT; k++)
+		w += BTN_W[WIN_BTNS[k]] + BTN_GAP;
+	return w - BTN_GAP + BTN_PAD;
+}
 
 
 /** Where the window was last put. A transport that opens in the middle of the rack every time
@@ -202,6 +222,89 @@ static std::vector<Step> selfTestScript(Stage& stage) {
 }
 
 
+static std::string fit(NVGcontext* vg, std::string text, float width) {
+	float bounds[4] = {0.f, 0.f, 0.f, 0.f};
+	nvgTextBounds(vg, 0.f, 0.f, text.c_str(), NULL, bounds);
+	if (bounds[2] - bounds[0] <= width)
+		return text;
+	while (text.size() > 1) {
+		text.resize(text.size() - 1);
+		const std::string tryIt = text + "\u2026";
+		nvgTextBounds(vg, 0.f, 0.f, tryIt.c_str(), NULL, bounds);
+		if (bounds[2] - bounds[0] <= width)
+			return tryIt;
+	}
+	return text;
+}
+
+/** A chevron, so a field that opens a list looks like one. */
+static void drawChevron(NVGcontext* vg, float x, float y, float r) {
+	nvgBeginPath(vg);
+	nvgMoveTo(vg, x - r, y - r * 0.45f);
+	nvgLineTo(vg, x, y + r * 0.55f);
+	nvgLineTo(vg, x + r, y - r * 0.45f);
+	nvgStrokeColor(vg, INK);
+	nvgStrokeWidth(vg, std::fmax(1.2f, r * 0.34f));
+	nvgLineCap(vg, NVG_ROUND);
+	nvgLineJoin(vg, NVG_ROUND);
+	nvgStroke(vg);
+}
+
+void demoDrawChip(NVGcontext* vg, math::Rect r, const std::string& label, bool lit) {
+	// THE SAME COLOURS AS THE PANEL, so the two views of these controls read as one thing:
+	// green for the press that starts something, red for the press that stops it, the accent
+	// for a setting that is simply on. The word says which it is — a run in progress reads
+	// "Stop" — so the colour follows the word rather than a flag of its own.
+	static const NVGcolor GREEN = nvgRGB(0x3d, 0xe0, 0x7a);
+	static const NVGcolor RED = nvgRGB(0xe0, 0x3b, 0x3b);
+	const bool go = (label == "Run" || label == "Reset");
+	const bool halt = (label == "Stop");
+
+	nvgBeginPath(vg);
+	nvgRoundedRect(vg, r.pos.x, r.pos.y, r.size.x, r.size.y, 4.f);
+	nvgFillColor(vg, halt ? RED : go ? GREEN
+		: lit ? nvgRGB(0x3a, 0x2c, 0x18) : nvgRGB(0x22, 0x22, 0x26));
+	nvgFill(vg);
+	nvgStrokeColor(vg, halt ? RED : go ? GREEN
+		: lit ? ACCENT : nvgRGBA(0xcf, 0xcf, 0xcf, 0x90));
+	nvgStrokeWidth(vg, 1.f);
+	nvgStroke(vg);
+
+	std::shared_ptr<window::Font> font = uiFont();
+	if (!font || font->handle < 0)
+		return;
+	nvgFontFaceId(vg, font->handle);
+	nvgFontSize(vg, 14.f);
+	// Dark lettering on the two filled buttons, which are the only ones with a bright ground.
+	nvgFillColor(vg, (go || halt) ? nvgRGB(0x10, 0x12, 0x16) : lit ? ACCENT : INK);
+	nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+	nvgText(vg, r.pos.x + r.size.x / 2.f, r.pos.y + r.size.y / 2.f + 0.5f,
+		label.c_str(), NULL);
+}
+
+/** The script picker: a field carrying the name of what is loaded, with a chevron. */
+void demoDrawField(NVGcontext* vg, math::Rect r, const std::string& label) {
+	nvgBeginPath(vg);
+	nvgRoundedRect(vg, r.pos.x, r.pos.y, r.size.x, r.size.y, 4.f);
+	nvgFillColor(vg, nvgRGB(0x1a, 0x1a, 0x1e));
+	nvgFill(vg);
+	nvgStrokeColor(vg, nvgRGBA(0xcf, 0xcf, 0xcf, 0x90));
+	nvgStrokeWidth(vg, 1.f);
+	nvgStroke(vg);
+
+	std::shared_ptr<window::Font> font = uiFont();
+	if (!font || font->handle < 0)
+		return;
+	nvgFontFaceId(vg, font->handle);
+	nvgFontSize(vg, 14.f);
+	nvgFillColor(vg, INK);
+	nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+	nvgText(vg, r.pos.x + 10.f, r.pos.y + r.size.y / 2.f + 0.5f,
+		fit(vg, label, r.size.x - 32.f).c_str(), NULL);
+	drawChevron(vg, r.pos.x + r.size.x - 12.f, r.pos.y + r.size.y / 2.f - 1.f, 4.5f);
+}
+
+
 // ---------------------------------------------------------------- the window
 
 struct Transport : widget::OpaqueWidget, OurWidget {
@@ -214,11 +317,11 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 	the synthetic pointer could walk onto it and drag it about.
 	
 	Escape still stops a run and puts the patch back, which is the one control a take needs. */
-	bool hideWhileRunning = true;
+	bool hideWhileRunning = false;
 	math::Vec dragStart;
 
 	Transport() {
-		box.size = math::Vec(T_W, T_H);
+		box.size = math::Vec(winWidth(), T_H);
 		// OPENS ON WHATEVER WAS TOUCHED LAST — the script played most recently, or the one whose
 		// file was edited most recently, whichever of those happened later. There is no state in
 		// which the transport comes up holding nothing while scripts exist.
@@ -294,15 +397,18 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 	/** THE LIST OF SCRIPTS, dropped out of the field that names the current one. Every script
 	is in it, so there is nothing left for a menu of commands to do: opening a file by hand was
 	only ever a way round a list that did not show them all. */
-	void chooseScript() {
+	void chooseScript(math::Rect anchorScene) {
 		const std::vector<std::string> found = scriptList();
 		if (found.empty()) {
 			runner.failure = "no scripts in " + scriptDir();
 			return;
 		}
-		const math::Rect field = buttonRect(B_SCRIPT);
+		// The list drops out of whatever was pressed to open it — the field on the module's
+		// panel — so it appears where the hand already is.
+		if (anchorScene.size.x <= 0.f)
+			anchorScene = math::Rect(box.pos, math::Vec(240.f, BTN_H));
 		Transport* self = this;
-		pickerOpen(math::Rect(box.pos.plus(field.pos), field.size), found, scriptPath,
+		pickerOpen(anchorScene, found, scriptPath,
 			[self](std::string path) { self->loadScript(path); });
 	}
 
@@ -314,11 +420,17 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 		return math::Rect(math::Vec(box.size.x - T_TITLE, 0.f), math::Vec(T_TITLE, T_TITLE));
 	}
 
+	/** Where a button is IN THIS WINDOW, or an empty rectangle for one the window does not
+	carry — which is most of them, since the rest live on the module's panel. An empty rectangle
+	contains no point, so the loops that search and draw need no special case. */
 	math::Rect buttonRect(int i) {
 		float x = BTN_PAD;
-		for (int k = 0; k < i; k++)
-			x += BTN_W[k] + BTN_GAP;
-		return math::Rect(math::Vec(x, BTN_Y), math::Vec(BTN_W[i], BTN_H));
+		for (int k = 0; k < WIN_COUNT; k++) {
+			if (WIN_BTNS[k] == i)
+				return math::Rect(math::Vec(x, BTN_Y), math::Vec(BTN_W[i], BTN_H));
+			x += BTN_W[WIN_BTNS[k]] + BTN_GAP;
+		}
+		return math::Rect();
 	}
 
 	std::string buttonLabel(int i) {
@@ -332,9 +444,11 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 			case B_STEP: return "Step";
 			// Lit when on, so the label is the name of the thing rather than its state.
 			case B_RELOAD: return "Reload";
+			case B_PATCH: return "Patch";
 			case B_VOICE: return "Voice";
 			case B_BADGES: return "Badges";
 			case B_CAPTIONS: return "Captions";
+			case B_RECORD: return "Record";
 			case B_HIDE: return "Hide";
 			default: {
 				char buf[24];
@@ -344,7 +458,7 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 		}
 	}
 
-	void press(int i) {
+	void press(int i, math::Rect anchorScene = math::Rect()) {
 		// ANY PRESS BUT RUN TAKES THE MESSAGE DOWN. A failure has to stay up long enough to be
 		// read, and then it has to be dismissable by doing something — otherwise the only way
 		// out of it is to close the window.
@@ -355,11 +469,33 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 		}
 		switch (i) {
 			case B_SCRIPT:
-				chooseScript();
+				chooseScript(anchorScene);
 				break;
 			case B_RELOAD:
 				if (!scriptPath.empty())
 					loadScript(scriptPath);
+				break;
+			// THE SCRIPT'S PATCH, OPENED AS YOU WOULD OPEN IT YOURSELF.
+			//
+			// A script's patch is a file that wants correcting between takes: run the demo, see
+			// that a widget sits badly or a knob is in the wrong place, put it right, save. Rack
+			// saves to the file it believes it has open, and a patch the demo loaded on its own
+			// account is not that — so this opens it the way the File menu would, which sets the
+			// path and puts it in the recent list. Command-S then writes it back where it came
+			// from, with no dialogue.
+			case B_PATCH:
+				if (runner.patchPath.empty()) {
+					runner.failure = "This script names no patch of its own.";
+					break;
+				}
+				if (!system::isFile(runner.patchPath)) {
+					runner.failure = "There is no patch at " + runner.patchPath;
+					break;
+				}
+				// The session is armed first, so the rack you were working on is still put back
+				// when the transport closes — opening the demo's patch is not losing your own.
+				runner.armSession();
+				APP->patch->loadAction(runner.patchPath);
 				break;
 			case B_RUN:
 				if (runner.isRunning()) {
@@ -407,6 +543,15 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 				break;
 			case B_CAPTIONS:
 				card()->enabled = !card()->enabled;
+				break;
+			case B_RECORD:
+				// ARMED, NOT STARTED. Nothing is recorded until a run starts, and everything is
+				// recorded from then until it stops.
+				if (!captureAvailable()) {
+					runner.failure = "recording needs macOS 13 or newer";
+					break;
+				}
+				captureArm(!captureArmed());
 				break;
 			case B_HIDE:
 				hideWhileRunning = !hideWhileRunning;
@@ -477,6 +622,9 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 
 	void step() override {
 		raiseTheatreNow();
+		// Before the tick: a press that loads a patch should be done and settled before the
+		// runner looks at the rack it is going to act on.
+		demoPanelPump();
 		runner.tick();
 
 		// A SCRIPT THAT REACHES ITS LAST STEP HAS STOPPED, not finished with. The rack it built
@@ -513,6 +661,16 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 						menuUp = true;
 				}
 				if (!menuUp) {
+					// ESCAPE STOPS THE TAKE. It used to close this window, and the window owns
+					// the runner — so the key reached for to end a run also threw away the
+					// script, the rate, the voice and whether recording was armed, and the next
+					// run quietly recorded nothing. Pressed again, with nothing running, it
+					// closes the window as before and hands the viewer's patch back.
+					if (runner.isRunning()) {
+						runner.stop();
+						stopped = true;
+						return;
+					}
 					gClosing = true;
 					requestDelete();
 					return;
@@ -526,6 +684,11 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 		if (e.action == GLFW_PRESS && e.key == GLFW_KEY_ESCAPE) {
 			e.consume(this);
 			e.stopPropagating();
+			if (runner.isRunning()) {
+				runner.stop();
+				stopped = true;
+				return;
+			}
 			gClosing = true;
 			requestDelete();
 			return;
@@ -535,76 +698,6 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 
 	/** A name that will not fit is cut and finished with an ellipsis, rather than running out
 	of its field. */
-	std::string fit(NVGcontext* vg, std::string text, float width) {
-		float bounds[4] = {0.f, 0.f, 0.f, 0.f};
-		nvgTextBounds(vg, 0.f, 0.f, text.c_str(), NULL, bounds);
-		if (bounds[2] - bounds[0] <= width)
-			return text;
-		while (text.size() > 1) {
-			text.resize(text.size() - 1);
-			const std::string tryIt = text + "\u2026";
-			nvgTextBounds(vg, 0.f, 0.f, tryIt.c_str(), NULL, bounds);
-			if (bounds[2] - bounds[0] <= width)
-				return tryIt;
-		}
-		return text;
-	}
-
-	/** A chevron, so a field that opens a list looks like one. */
-	void drawChevron(NVGcontext* vg, float x, float y, float r) {
-		nvgBeginPath(vg);
-		nvgMoveTo(vg, x - r, y - r * 0.45f);
-		nvgLineTo(vg, x, y + r * 0.55f);
-		nvgLineTo(vg, x + r, y - r * 0.45f);
-		nvgStrokeColor(vg, INK);
-		nvgStrokeWidth(vg, std::fmax(1.2f, r * 0.34f));
-		nvgLineCap(vg, NVG_ROUND);
-		nvgLineJoin(vg, NVG_ROUND);
-		nvgStroke(vg);
-	}
-
-	void drawChip(NVGcontext* vg, math::Rect r, const std::string& label, bool lit) {
-		nvgBeginPath(vg);
-		nvgRoundedRect(vg, r.pos.x, r.pos.y, r.size.x, r.size.y, 4.f);
-		nvgFillColor(vg, lit ? nvgRGB(0x3a, 0x2c, 0x18) : nvgRGB(0x22, 0x22, 0x26));
-		nvgFill(vg);
-		nvgStrokeColor(vg, lit ? ACCENT : nvgRGBA(0xcf, 0xcf, 0xcf, 0x90));
-		nvgStrokeWidth(vg, 1.f);
-		nvgStroke(vg);
-
-		std::shared_ptr<window::Font> font = uiFont();
-		if (!font || font->handle < 0)
-			return;
-		nvgFontFaceId(vg, font->handle);
-		nvgFontSize(vg, 14.f);
-		nvgFillColor(vg, lit ? ACCENT : INK);
-		nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		nvgText(vg, r.pos.x + r.size.x / 2.f, r.pos.y + r.size.y / 2.f + 0.5f,
-			label.c_str(), NULL);
-	}
-
-	/** The script picker: a field carrying the name of what is loaded, with a chevron. */
-	void drawField(NVGcontext* vg, math::Rect r, const std::string& label) {
-		nvgBeginPath(vg);
-		nvgRoundedRect(vg, r.pos.x, r.pos.y, r.size.x, r.size.y, 4.f);
-		nvgFillColor(vg, nvgRGB(0x1a, 0x1a, 0x1e));
-		nvgFill(vg);
-		nvgStrokeColor(vg, nvgRGBA(0xcf, 0xcf, 0xcf, 0x90));
-		nvgStrokeWidth(vg, 1.f);
-		nvgStroke(vg);
-
-		std::shared_ptr<window::Font> font = uiFont();
-		if (!font || font->handle < 0)
-			return;
-		nvgFontFaceId(vg, font->handle);
-		nvgFontSize(vg, 14.f);
-		nvgFillColor(vg, INK);
-		nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-		nvgText(vg, r.pos.x + 10.f, r.pos.y + r.size.y / 2.f + 0.5f,
-			fit(vg, label, r.size.x - 32.f).c_str(), NULL);
-		drawChevron(vg, r.pos.x + r.size.x - 12.f, r.pos.y + r.size.y / 2.f - 1.f, 4.5f);
-	}
-
 	void drawCross(NVGcontext* vg, math::Rect r) {
 		const float m = 7.f;
 		nvgBeginPath(vg);
@@ -668,15 +761,16 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 
 		for (int i = 0; i < B_COUNT; i++) {
 			if (i == B_SCRIPT) {
-				drawField(args.vg, buttonRect(i), buttonLabel(i));
+				demoDrawField(args.vg, buttonRect(i), buttonLabel(i));
 				continue;
 			}
 			const bool lit = (i == B_RUN && runner.isRunning())
 				|| (i == B_VOICE && runner.speak)
 				|| (i == B_BADGES && theatre()->badges)
 				|| (i == B_CAPTIONS && card()->enabled)
-				|| (i == B_HIDE && hideWhileRunning);
-			drawChip(args.vg, buttonRect(i), buttonLabel(i), lit);
+				|| (i == B_RECORD && captureArmed())
+		|| (i == B_HIDE && hideWhileRunning);
+			demoDrawChip(args.vg, buttonRect(i), buttonLabel(i), lit);
 		}
 
 		OpaqueWidget::draw(args);
@@ -794,6 +888,11 @@ std::string sceneContents() {
 }
 
 
+bool transportOpen() {
+	return gTransport != NULL;
+}
+
+
 math::Rect transportRect() {
 	// Nothing to keep clear of when it is not on screen.
 	if (!gTransport || !gTransport->visible)
@@ -805,40 +904,110 @@ math::Rect transportRect() {
 /** Six places the transport can stand, in preference order. The top of the window first, because
 the card prefers the bottom and the two must not be sent to the same corner. */
 void transportStepAside(math::Rect region) {
-	if (!gTransport || region.size.x <= 0.f || region.size.y <= 0.f)
-		return;
-	const math::Rect mine(gTransport->box.pos, gTransport->box.size);
-	if (!mine.intersects(region))
-		return;
+	// NOTHING TO STEP ASIDE FROM ANY MORE, and that is the point of the window being small.
+	//
+	// It used to carry every control, which made it a bar across the rack that had to dodge
+	// whatever the demo was about to touch — and a window that moves while a demo is running is
+	// a window the synthetic pointer can arrive at the wrong place on, or the real one can lose.
+	// Three buttons in a corner are out of the way of everything, so it stays where it is put.
+	(void) region;
+}
 
-	// NOT WHILE THE POINTER IS ON IT. A window that jumps out from under your hand as you reach
-	// for a button is wrong on its own account, and here it is worse than untidy: the press then
-	// lands on the rack behind, and over a jack that means picking up a cable instead of
-	// starting the demo. Whatever the step was about to do can be done with the window where it
-	// is; it will move at the next note, when the pointer has gone.
-	if (mine.grow(math::Vec(12.f, 12.f)).contains(APP->scene->getMousePos()))
-		return;
 
-	const math::Vec scene = APP->scene->box.size;
-	const float m = 24.f;
-	const float cx = (scene.x - T_W) / 2.f;
-	const math::Vec spots[6] = {
-		math::Vec(cx, m),
-		math::Vec(m, m),
-		math::Vec(scene.x - T_W - m, m),
-		math::Vec(m, scene.y - T_H - m),
-		math::Vec(scene.x - T_W - m, scene.y - T_H - m),
-		math::Vec(cx, scene.y - T_H - m),
-	};
-	for (int i = 0; i < 6; i++) {
-		const math::Rect there(spots[i], gTransport->box.size);
-		if (!there.intersects(region)) {
-			gTransport->box.pos = spots[i];
-			gWhere = spots[i];
-			return;
-		}
+// ------------------------------------------------- the half that lives on the panel
+
+/** IN THE ORDER THEY ARE REACHED FOR. The script first, since nothing else means anything until
+one is chosen; then the two that act on the file; then the transport proper; then the settings,
+which are set once and left. */
+static const int PANEL_BTNS[] = {B_SCRIPT, B_RELOAD, B_PATCH, B_RUN, B_RESTART, B_BACK, B_STEP,
+	B_RATE, B_VOICE, B_BADGES, B_CAPTIONS, B_RECORD, B_HIDE};
+static const int PANEL_COUNT = (int) (sizeof(PANEL_BTNS) / sizeof(PANEL_BTNS[0]));
+
+int demoPanelRows() {
+	return PANEL_COUNT;
+}
+
+bool demoPanelIsField(int row) {
+	return row >= 0 && row < PANEL_COUNT && PANEL_BTNS[row] == B_SCRIPT;
+}
+
+std::string demoPanelLabel(int row) {
+	if (row < 0 || row >= PANEL_COUNT)
+		return "";
+	const int b = PANEL_BTNS[row];
+	if (gTransport)
+		return gTransport->buttonLabel(b);
+	// Before anything has been opened there is no state to report, so the panel says what each
+	// row is for rather than what it is set to.
+	switch (b) {
+		case B_SCRIPT: return "Choose a script";
+		case B_RELOAD: return "Reload";
+		case B_PATCH: return "Patch";
+		case B_RUN: return "Run";
+		case B_RESTART: return "Restart";
+		case B_BACK: return "Back";
+		case B_STEP: return "Step";
+		case B_VOICE: return "Voice";
+		case B_BADGES: return "Badges";
+		case B_CAPTIONS: return "Captions";
+		case B_RECORD: return "Record";
+		case B_HIDE: return "Hide";
+		default: return "Rate";
 	}
-	// Nowhere is clear. Leave it where the author put it rather than shuffling it about.
+}
+
+bool demoPanelLit(int row) {
+	if (row < 0 || row >= PANEL_COUNT)
+		return false;
+	const int b = PANEL_BTNS[row];
+	if (b == B_RECORD)
+		return captureArmed();
+	if (!gTransport)
+		return false;
+	return (b == B_RUN && gTransport->runner.isRunning())
+		|| (b == B_VOICE && gTransport->runner.speak)
+		|| (b == B_BADGES && theatre()->badges)
+		|| (b == B_CAPTIONS && card()->enabled)
+		|| (b == B_RECORD && captureArmed())
+		|| (b == B_HIDE && gTransport->hideWhileRunning);
+}
+
+/** A PANEL PRESS IS PERFORMED A FRAME LATER, NEVER WHERE IT LANDS.
+
+Both things a panel control does are fatal inside a button event. Opening the runner adds a
+child to the scene while Rack is walking the scene to deliver that very click. And Patch, Run
+and Reload load a patch, which destroys and rebuilds every module — including the panel whose
+onButton is running, so the click returns into freed memory. It crashed on the first press of
+either.
+
+So a press is written down here and done from the runner's own step, which is a child of the
+scene rather than of the rack and therefore survives a patch being loaded. */
+static int gPendingRow = -1;
+static math::Rect gPendingAnchor;
+
+void demoPanelPress(int row, math::Rect anchorScene) {
+	if (row < 0 || row >= PANEL_COUNT)
+		return;
+	gPendingRow = row;
+	gPendingAnchor = anchorScene;
+}
+
+/** Called once a frame by the runner window, and by the module while there is no window yet. */
+void demoPanelPump() {
+	if (gPendingRow < 0)
+		return;
+	if (!gTransport) {
+		// Safe here and nowhere else: the scene holds its children in a list, so adding one
+		// while the scene is being stepped does not disturb the walk.
+		transportShow();
+		return;   // and the window's own step performs the press on the next frame
+	}
+	const int row = gPendingRow;
+	const math::Rect anchor = gPendingAnchor;
+	gPendingRow = -1;
+	gPendingAnchor = math::Rect();
+	INFO("DreamerDemo panel: row %d, \"%s\"", row, demoPanelLabel(row).c_str());
+	gTransport->press(PANEL_BTNS[row], anchor);
 }
 
 
@@ -852,10 +1021,11 @@ void transportShow() {
 		return;
 	}
 	gTransport = new Transport;
-	if (gWhere.x < 0.f) {
-		gWhere = math::Vec(std::fmax(20.f, (APP->scene->box.size.x - T_W) / 2.f),
-			std::fmax(20.f, APP->scene->box.size.y - T_H - 40.f));
-	}
+	// THE TOP LEFT CORNER, until it is dragged somewhere else. It is small, it stays put for
+	// the whole take, and a corner is the easiest part of a picture to frame out of a
+	// recording. Where it is dragged to is remembered for the session.
+	if (gWhere.x < 0.f)
+		gWhere = math::Vec(24.f, 24.f);
 	gTransport->box.pos = gWhere;
 	APP->scene->addChild(gTransport);
 	raiseTheatre();

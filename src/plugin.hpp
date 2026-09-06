@@ -67,10 +67,41 @@ void raiseTheatre();
 /** Opens the transport, or brings it forward if it is already up. */
 void transportShow();
 
+/** THE CONTROLS THAT LIVE ON THE MODULE'S PANEL.
+
+A demo is set up and driven in two quite different situations. Choosing a script, reloading it,
+turning the voice or the badges off — that is done with the rack sitting still, it is nobody's
+business but the author's, and it wants a permanent place: the module's own panel, which is
+where a Rack user looks for a module's controls. Driving a take wants the opposite: three
+buttons that never move and never hide, in a corner, over whatever the demo is doing.
+
+These are the panel's half. They are answered without the transport window existing, and pressing
+one opens it, since that is where the state lives. */
+int demoPanelRows();
+std::string demoPanelLabel(int row);
+bool demoPanelLit(int row);
+bool demoPanelIsField(int row);
+void demoPanelPress(int row, math::Rect anchorScene);
+/** Performs a pending panel press. Called from the runner's step, and from the module's while
+there is no runner window yet — never from an event, since what these do is destroy and rebuild
+the rack that delivered it. */
+void demoPanelPump();
+/** The transport's own chip and field, so the panel is drawn in the same hand. */
+void demoDrawChip(NVGcontext* vg, math::Rect r, const std::string& label, bool lit);
+void demoDrawField(NVGcontext* vg, math::Rect r, const std::string& label);
+
 /** THE TRANSPORT STANDS OUT OF THE WAY of the region a demo is about to work in. It is an opaque
 window over the rack, so a click aimed at a control underneath it would land on the transport
 instead. Called once per note, with the region that note's steps will touch. */
 void transportStepAside(math::Rect region);
+
+/** Whether the transport exists at all.
+
+NOT THE SAME AS BEING ON SCREEN. The transport takes itself out of the picture while a run is
+going, which is what makes a clean recording — so "no transport visible" is the ordinary state
+during a take, and anything that treats it as proof the demo is over will end the demo the
+moment it begins. */
+bool transportOpen();
 
 /** Where the transport is, in scene coordinates, or an empty rectangle when it is not open. The
 card keeps clear of it: a note that covers the controls cannot be dismissed by pressing one. */

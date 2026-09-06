@@ -114,7 +114,12 @@ void Theatre::step() {
 	// a hidden cursor is invisible in the most literal way, and if any path ever fails to lower
 	// this flag the pointer is gone for the rest of the session with nothing on screen to say
 	// why. Losing the window is proof enough that the demo is over.
-	if (transportRect().size.x <= 0.f) {
+	//
+	// THE WINDOW EXISTING, NOT THE WINDOW BEING SEEN. It takes itself off the screen for the
+	// length of a run, which is the whole point of it — and asking whether it was visible meant
+	// the net closed on the first frame of every take: no drawn pointer, and the viewer's own
+	// cursor handed back in the middle of a recording.
+	if (!transportOpen()) {
 		live = false;
 		running = false;
 	}
@@ -128,6 +133,13 @@ void Theatre::step() {
 			live ? GLFW_CURSOR_HIDDEN : GLFW_CURSOR_NORMAL);
 		hidden = live;
 	}
+
+	// THE REAL CURSOR IS NOT MOVED TO FOLLOW THE DRAWN ONE. It was tried: warping it under the
+	// synthetic pointer would make anything that polls the operating system agree with the
+	// demo. But warping it every frame also takes the viewer's mouse away from them for the
+	// length of a take, and a run that cannot be reached with the real pointer is worse than
+	// the fault it was fixing. Anything of ours that needs to know where the pointer is asks
+	// the scene, which is what injected hover events set.
 
 	widget::Widget::step();
 }

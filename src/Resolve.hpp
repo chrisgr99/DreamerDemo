@@ -66,6 +66,17 @@ struct Stage {
 rack's zoom applied. Rack's ZoomWidget does the arithmetic; this only names it. */
 math::Rect sceneRect(widget::Widget* w);
 
+/** The clip-on widget attached to a port, or nothing. Found by asking the plugin that made it
+where it put it — see the note in Resolve.cpp, which is the only honest way to do this.
+
+A kind — "switch", "av", "scope", "meter" — picks between several on the same port, which is an
+ordinary thing to find on an input. Empty takes the first. */
+widget::Widget* clipOnPort(app::PortWidget* pw, const std::string& kind = "",
+	float* faceHeight = NULL);
+
+/** The close cross belonging to a clip-on widget, which is how a person takes one off. */
+widget::Widget* clipCloseOf(widget::Widget* clip);
+
 /** Whether the point a click would go to is inside the window. A control scrolled off the rack
 has a position, and it is a lie — pointing at it would send the pointer off the edge of the
 picture and act on whatever happened to be there.

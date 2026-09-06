@@ -9,11 +9,33 @@
 
 RACK_DIR ?= ../Rack-SDK
 
+# WHICH PLATFORM, decided before the SDK is included. ARCH_MAC is set by the SDK's arch.mk,
+# which plugin.mk pulls in at the bottom of this file — too late to choose sources with.
+ifdef CROSS_COMPILE
+	TARGET_MACHINE := $(CROSS_COMPILE)
+else
+	TARGET_MACHINE := $(shell $(CC) -dumpmachine)
+endif
+
 SOURCES += $(wildcard src/*.cpp)
+
+# OBJECTIVE-C++ ONLY ON MACOS. The recorder is ScreenCaptureKit, which is Apple's; elsewhere
+# src/capture_other.cpp supplies the same four functions and says it cannot.
+ifneq (,$(findstring -darwin,$(TARGET_MACHINE)))
+	SOURCES += $(wildcard src/*.mm)
+endif
 
 DISTRIBUTABLES += $(wildcard LICENSE*)
 
 include $(RACK_DIR)/plugin.mk
+
+# The recorder's frameworks. WEAK on ScreenCaptureKit, so the plugin still loads on a macOS too
+# old to have it — captureAvailable() then answers no and the button stays dark, rather than the
+# whole plugin failing at dlopen with a missing library.
+ifdef ARCH_MAC
+	LDFLAGS += -framework Cocoa -framework AVFoundation -framework CoreMedia \
+		-framework CoreVideo -weak_framework ScreenCaptureKit
+endif
 
 # DEVELOPMENT INSTALL, and why it is not `make install`.
 #
