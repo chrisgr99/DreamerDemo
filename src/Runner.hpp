@@ -52,6 +52,11 @@ struct Step {
 		POINT,        /**< go there and say the note; touch nothing */
 		CLICK,
 		RIGHT_CLICK,  /**< opens a context menu, since that is what it does in Rack */
+		HELP_CLICK,   /**< option-click, which is how Clarity's in-rack help is asked.
+
+		A gesture DEFINED by its modifier, so a demo of it that sent a plain click would be a
+		demo of nothing. Rack's only use of option is panning the rack, and Clarity answers this
+		one above the scroll view, so sending it here disturbs nothing else on the panel. */
 		SET,          /**< move a parameter to `value`, a fraction of its own range */
 		SCROLL,
 		PATCH,        /**< join `target` to `target2`, either way round */
@@ -162,6 +167,9 @@ private:
 	it; nothing here is ever authored. */
 	struct Gest {
 		std::string word;
+		/** Held on the press AND the release, because Rack reads the mask off the event rather
+		than off the keyboard. Zero for every ordinary click. */
+		int mods = 0;
 		enum Do {
 			MOVE, CLICK_L, CLICK_R, DOWN, DRAG, UP, SET_VALUE, WHEEL,
 			MENU_MOVE,   /**< travel to a menu item, whose position only exists once the menu is

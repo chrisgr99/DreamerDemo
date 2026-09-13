@@ -725,12 +725,16 @@ void Runner::expand(const Step& s) {
 			break;
 
 		case Step::CLICK:
+		case Step::HELP_CLICK:
 		case Step::RIGHT_CLICK:
 		case Step::MENU: {
 			Gest g;
-			const bool right = (s.kind != Step::CLICK);
-			g.word = right ? "right click" : "left click";
+			const bool right = (s.kind == Step::RIGHT_CLICK || s.kind == Step::MENU);
+			g.word = right ? "right click"
+				: (s.kind == Step::HELP_CLICK) ? "help click" : "left click";
 			g.act = right ? Gest::CLICK_R : Gest::CLICK_L;
+			if (s.kind == Step::HELP_CLICK)
+				g.mods = GLFW_MOD_ALT;
 			g.pos = a.centre();
 			g.glow = a.rect;
 			g.target = a;
@@ -1411,7 +1415,7 @@ void Runner::startGest() {
 					+ ": something is covering that control, so the click would land on it.");
 				return;
 			}
-			gPress(g.pos, GLFW_MOUSE_BUTTON_LEFT);
+			gPress(g.pos, GLFW_MOUSE_BUTTON_LEFT, g.mods);
 			buttonDown = true;
 			theatre()->ripple();
 			if (g.glow.size.x > 0.f)
@@ -1437,7 +1441,7 @@ void Runner::startGest() {
 
 		case Gest::DOWN:
 			gHover(g.pos, math::Vec());
-			gPress(g.pos, GLFW_MOUSE_BUTTON_LEFT);
+			gPress(g.pos, GLFW_MOUSE_BUTTON_LEFT, g.mods);
 			buttonDown = true;
 			theatre()->ripple();
 			if (g.glow.size.x > 0.f)
@@ -1612,7 +1616,7 @@ void Runner::tick() {
 			// The button comes up at the end of the click it went down for.
 			Gest& g = gests[gi];
 			if (g.act == Gest::CLICK_L || g.act == Gest::CLICK_HERE) {
-				gRelease(g.pos, GLFW_MOUSE_BUTTON_LEFT);
+				gRelease(g.pos, GLFW_MOUSE_BUTTON_LEFT, g.mods);
 				buttonDown = false;
 			}
 			else if (g.act == Gest::CLICK_R) {

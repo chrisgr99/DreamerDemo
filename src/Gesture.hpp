@@ -26,9 +26,22 @@ namespace demo {
 
 /** Positions are in SCENE coordinates, the same ones Rack's window hands its own callbacks. */
 void gHover(math::Vec pos, math::Vec delta);
-void gPress(math::Vec pos, int button);
-void gRelease(math::Vec pos, int button);
+void gPress(math::Vec pos, int button, int mods = 0);
+void gRelease(math::Vec pos, int button, int mods = 0);
 void gClick(math::Vec pos, int button);
+
+/** A click with the modifiers held, for a gesture that only exists while they are.
+
+WHY IT IS ITS OWN THING. Rack reads the modifier mask off the event, not off the keyboard, so a
+demo cannot press Cmd and then click — it has to say so on the click itself. Clarity's in-rack
+help is the case this was added for: cmd-shift-click a control and a note appears saying what
+that one control is, and the gesture is defined by the modifiers, so a demo of it that sent a
+plain click would be a demo of nothing.
+
+NO TRAVEL BETWEEN PRESS AND RELEASE, deliberately. The help decides on the release, and treats
+any movement beyond three pixels as a drag — which on a jack is Rack's own clone-a-cable. Press
+and release at one point is what a person does and what this must send. */
+void gModClick(math::Vec pos, int button, int mods);
 
 /** A click that spans a frame rather than happening inside one.
 

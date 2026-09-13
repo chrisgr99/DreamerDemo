@@ -237,13 +237,14 @@ Script scriptLoad(const std::string& path) {
 				}
 			}
 			else if (verb == "point" || verb == "press" || verb == "click"
-				|| verb == "right" || verb == "unpatch") {
+				|| verb == "right" || verb == "unpatch" || verb == "help") {
 				if (w.size() < 2) {
 					sc.error = "line " + std::to_string(s.line) + ": " + verb + " needs a target";
 					return sc;
 				}
 				s.kind = (verb == "point") ? Step::POINT
 					: (verb == "right") ? Step::RIGHT_CLICK
+					: (verb == "help") ? Step::HELP_CLICK
 					: (verb == "unpatch") ? Step::UNPATCH : Step::CLICK;
 				s.target = w[1];
 			}

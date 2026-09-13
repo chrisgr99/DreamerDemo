@@ -26,15 +26,22 @@ void gHover(math::Vec pos, math::Vec delta) {
 }
 
 
-void gPress(math::Vec pos, int button) {
+void gPress(math::Vec pos, int button, int mods) {
 	Injecting guard;
-	APP->event->handleButton(pos, button, GLFW_PRESS, 0);
+	APP->event->handleButton(pos, button, GLFW_PRESS, mods);
 }
 
 
-void gRelease(math::Vec pos, int button) {
+void gRelease(math::Vec pos, int button, int mods) {
 	Injecting guard;
-	APP->event->handleButton(pos, button, GLFW_RELEASE, 0);
+	APP->event->handleButton(pos, button, GLFW_RELEASE, mods);
+}
+
+
+void gModClick(math::Vec pos, int button, int mods) {
+	gHover(pos, math::Vec(0.f, 0.f));
+	gPress(pos, button, mods);
+	gRelease(pos, button, mods);
 }
 
 

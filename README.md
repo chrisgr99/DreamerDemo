@@ -103,6 +103,7 @@ wait <seconds>                 let the patch play
 point <target>                 go there and say the note; touch nothing
 press <target>                 left click it
 right <target>                 right click it, which opens its menu
+help <target>                  option click it, which opens Clarity's in-rack help
 set <target> <value>           a fraction, a percentage, or a word
 scroll <target> [up|down] [n]  n notches of a wheel, one by default
 patch <target> -> <target>     either way round
