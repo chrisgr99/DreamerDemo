@@ -79,6 +79,13 @@ struct Step {
 		OPEN,         /**< load a patch file */
 		ADD,          /**< add a module of model `arg` and bind `target` to it */
 		KEY,          /**< press a key, delivered to whatever the pointer is over */
+		ROW_TOP,      /**< which row sits at the top of the window, set at once */
+		ROWS,         /**< how many whole rack rows the view is held on, set at once
+
+		SETTING UP RATHER THAN DEMONSTRATING. Clarity holds the view on a chosen number of rows,
+		and the number is a setting of Clarity's rather than a parameter, so a script cannot state
+		it in a **Before** line. A demonstration that opens by pressing Command and an arrow four
+		times to reach a known count is showing nothing, so this puts it there silently. */
 	};
 	Kind kind = SAY;
 

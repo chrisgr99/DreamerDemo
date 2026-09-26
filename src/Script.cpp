@@ -327,6 +327,24 @@ Script scriptLoad(const std::string& path) {
 				s.kind = Step::KEY;
 				s.arg = w[1];
 			}
+			else if (verb == "row") {
+				if (w.size() < 2) {
+					sc.error = "line " + std::to_string(s.line)
+						+ ": row needs which row goes at the top";
+					return sc;
+				}
+				s.kind = Step::ROW_TOP;
+				s.value = (float) std::atof(w[1].c_str());
+			}
+			else if (verb == "rows") {
+				if (w.size() < 2) {
+					sc.error = "line " + std::to_string(s.line)
+						+ ": rows needs how many rows";
+					return sc;
+				}
+				s.kind = Step::ROWS;
+				s.value = (float) std::atof(w[1].c_str());
+			}
 			else if (verb == "pan") {
 				// "pan chart" centres on a module; "pan 12 -1" moves by that many HP and rows.
 				if (w.size() < 2) {

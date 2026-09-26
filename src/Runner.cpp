@@ -2,6 +2,7 @@
 #include "Capture.hpp"
 
 #include <cstdlib>
+#include <dlfcn.h>
 #include "Theatre.hpp"
 #include "Card.hpp"
 #include "Gesture.hpp"
@@ -503,6 +504,39 @@ void Runner::camTick() {
 }
 
 
+/** SOMETHING CLARITY OFFERS, LOOKED UP BY NAME, or nothing if that plugin is not installed.
+
+ASKED OF THAT PLUGIN'S OWN LIBRARY, not of the process. Rack opens every plugin with RTLD_LOCAL,
+so nothing a plugin exports is in the program's global namespace and dlsym(RTLD_DEFAULT) finds
+none of it — which made this look as though Clarity had no such function at all. Opening the
+library by path hands back the image that is already loaded, and its symbols can be asked for
+from there.
+
+Looked up once each, and said out loud in the log the first time, because a demo that quietly
+falls back to doing nothing is the hardest kind of failure to argue with. */
+typedef bool (*RowFn)(int, int);
+typedef void (*RowsFn)(int);
+
+static void* claritySymbol(const char* name) {
+	static void* handle = NULL;
+	static bool looked = false;
+	if (!looked) {
+		looked = true;
+		if (plugin::Plugin* p = plugin::getPlugin("DreamerDevelopment")) {
+			const std::string lib = p->path + "/plugin.dylib";
+			handle = dlopen(lib.c_str(), RTLD_NOW | RTLD_LOCAL);
+		}
+		INFO("DreamerDemo: Clarity's library is %s", handle ? "open" : "not there");
+	}
+	if (!handle)
+		return NULL;
+	void* sym = dlsym(handle, name);
+	if (!sym)
+		WARN("DreamerDemo: Clarity has no %s", name);
+	return sym;
+}
+
+
 void Runner::instant(const Step& s) {
 	// Steps with no pointer in them. They happen at once, and the note beside them is what tells
 	// the viewer that something has changed.
@@ -590,6 +624,30 @@ void Runner::instant(const Step& s) {
 			break;
 		}
 
+		case Step::ROW_TOP: {
+			RowsFn setTop = (RowsFn) claritySymbol("drRowViewTop");
+			if (!setTop) {
+				fail("Step " + std::to_string(index + 1)
+					+ ": row needs Clarity, which is not installed.");
+				return;
+			}
+			INFO("DreamerDemo step %d: row %d at the top", index + 1, (int) s.value);
+			setTop((int) s.value);
+			break;
+		}
+
+		case Step::ROWS: {
+			RowsFn setRows = (RowsFn) claritySymbol("drRowViewRows");
+			if (!setRows) {
+				fail("Step " + std::to_string(index + 1)
+					+ ": rows needs Clarity, which is not installed.");
+				return;
+			}
+			INFO("DreamerDemo step %d: %d rows on show", index + 1, (int) s.value);
+			setRows((int) s.value);
+			break;
+		}
+
 		case Step::KEY: {
 			// RACK SENDS A KEY TO WHAT THE POINTER IS OVER. That is why a key step follows one
 			// that put the pointer somewhere: standing on a window and pressing Escape is what a
@@ -606,6 +664,26 @@ void Runner::instant(const Step& s) {
 			std::string want = s.arg;
 			for (size_t i = 0; i < want.size(); i++)
 				want[i] = (char) std::tolower((unsigned char) want[i]);
+			// MODIFIERS IN FRONT OF IT, joined by plus signs: "cmd+up", "shift+alt+d". The last
+			// piece is the key and everything before it is held while it goes down.
+			int mods = 0;
+			size_t plus = want.find('+');
+			while (plus != std::string::npos) {
+				const std::string m = want.substr(0, plus);
+				if (m == "cmd" || m == "command" || m == "ctrl" || m == "control")
+					mods |= RACK_MOD_CTRL;   // Command on a Mac, Control everywhere else
+				else if (m == "shift")
+					mods |= GLFW_MOD_SHIFT;
+				else if (m == "alt" || m == "option")
+					mods |= GLFW_MOD_ALT;
+				else {
+					fail("Step " + std::to_string(index + 1) + ": no modifier called \""
+						+ m + "\".");
+					return;
+				}
+				want = want.substr(plus + 1);
+				plus = want.find('+');
+			}
 			for (size_t i = 0; i < sizeof(NAMES) / sizeof(NAMES[0]); i++) {
 				if (want == NAMES[i].name)
 					key = NAMES[i].key;
@@ -617,8 +695,30 @@ void Runner::instant(const Step& s) {
 				return;
 			}
 			INFO("DreamerDemo step %d: key %s at (%g,%g), under it: %s", index + 1,
-				want.c_str(), theatre()->at().x, theatre()->at().y, gHoveredName().c_str());
-			gKey(theatre()->at(), key);
+				s.arg.c_str(), theatre()->at().x, theatre()->at().y, gHoveredName().c_str());
+			// THE ARROWS ARE A SPECIAL CASE, and not one this plugin can avoid.
+			//
+			// Rack's scene answers the arrow keys before any widget in it is offered them, so a
+			// plugin that wants them reads the keyboard directly instead of waiting for an
+			// event — which is what Clarity does to hold the view on whole rows. A key sent into
+			// the scene from here is an event and nothing else, so it never reaches that code,
+			// and the one part of the feature a demo could not show was the two keys that work
+			// it. Clarity therefore offers the same two actions with the keyboard taken out of
+			// them, under a name that can be found at run time; when it is there and the view is
+			// being held on rows, an arrow does what the key would have done. When it is not,
+			// the key is sent as any other key is, and Rack scrolls as it always did.
+			if (key == GLFW_KEY_UP || key == GLFW_KEY_DOWN) {
+				RowFn rowCommand = (RowFn) claritySymbol("drRowViewCommand");
+				if (rowCommand) {
+					// Down goes down the rack; Command and Up shows one MORE row, which is the
+					// opposite way round, because the count grows as the view widens.
+					const int dir = (key == GLFW_KEY_DOWN) ? 1 : -1;
+					const bool counting = (mods & RACK_MOD_CTRL) != 0;
+					if (rowCommand(counting ? 0 : dir, counting ? -dir : 0))
+						break;
+				}
+			}
+			gKey(theatre()->at(), key, mods);
 			break;
 		}
 
@@ -682,6 +782,8 @@ void Runner::expand(const Step& s) {
 			return;
 		}
 		case Step::KEY:
+		case Step::ROWS:
+		case Step::ROW_TOP:
 		case Step::OPEN:
 		case Step::ADD: {
 			Gest g;

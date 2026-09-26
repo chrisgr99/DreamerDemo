@@ -98,11 +98,11 @@ void gScroll(math::Vec pos, math::Vec delta) {
 }
 
 
-void gKey(math::Vec pos, int key) {
+void gKey(math::Vec pos, int key, int mods) {
 	Injecting guard;
 	APP->event->handleHover(pos, math::Vec(0.f, 0.f));
-	APP->event->handleKey(pos, key, 0, GLFW_PRESS, 0);
-	APP->event->handleKey(pos, key, 0, GLFW_RELEASE, 0);
+	APP->event->handleKey(pos, key, 0, GLFW_PRESS, mods);
+	APP->event->handleKey(pos, key, 0, GLFW_RELEASE, mods);
 }
 
 
