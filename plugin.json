@@ -5,7 +5,7 @@
   "description": "Plays an authored script of real actions in Rack while a synthetic pointer, a gesture badge and a narrated card explain what is happening. An authoring tool, not a musical module.",
   "version": "2.0.0",
   "license": "GPL-3.0-or-later",
-  "author": "Dreamer Development",
+  "author": "Chris Graham",
   "authorUrl": "https://github.com/chrisgr99",
   "modules": [
     {
@@ -15,6 +15,15 @@
       "tags": [
         "Utility"
       ]
+    },
+    {
+      "slug": "Recorder",
+      "name": "Demo Recorder",
+      "description": "Records Rack's own window to a video while you work, and writes down what happened and when, so captions can be placed afterwards.",
+      "tags": [
+        "Utility"
+      ]
     }
-  ]
+  ],
+  "authorEmail": "chrisgr99@gmail.com"
 }

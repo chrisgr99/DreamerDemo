@@ -452,6 +452,13 @@ Script scriptLoad(const std::string& path) {
 						sc.before.push_back(std::make_pair(ref, v));
 				}
 			}
+			else if (key == "rows") {
+				sc.rows = std::atoi(value.c_str());
+			}
+			else if (key == "row") {
+				sc.topRow = std::atoi(value.c_str());
+				sc.haveTopRow = true;
+			}
 			else if (key == "master") {
 				sc.master = value;
 			}

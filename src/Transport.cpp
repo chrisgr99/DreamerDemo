@@ -374,6 +374,9 @@ struct Transport : widget::OpaqueWidget, OurWidget {
 		runner.voiceRate = sc.rate;
 		runner.master = sc.master;
 		runner.before = sc.before;
+		runner.rows = sc.rows;
+		runner.topRow = sc.topRow;
+		runner.haveTopRow = sc.haveTopRow;
 		runner.duck = sc.duck;
 		theatre()->badges = sc.badges;
 		card()->enabled = sc.captions;

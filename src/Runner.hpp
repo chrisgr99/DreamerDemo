@@ -107,6 +107,11 @@ struct Step {
 };
 
 
+/** WHERE A TAKE GOES: the Downloads folder, named for the script and the moment. Shared with
+the record key, which writes its takes to the same place under the same rule. */
+std::string takePath(const std::string& title);
+
+
 struct Runner {
 	Pacing pacing;
 	float rate = 1.0f;     /**< scales every wait; speech, when it arrives, is never scaled */
@@ -134,6 +139,10 @@ struct Runner {
 
 	/** Put where the script needs them at the start of a run, without ceremony. */
 	std::vector<std::pair<std::string, float> > before;
+	/** The view the script opens on: how many rows, and which row at the top. See Script.hpp. */
+	int rows = 0;
+	int topRow = 0;
+	bool haveTopRow = false;
 
 	/** Renders any line of this script that has no audio yet. Called when a script is loaded,
 	not when it is run, because rendering is slow the first time and instant after. */

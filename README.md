@@ -1,6 +1,6 @@
 # DreamerDemo
 
-A VCV Rack module that performs demonstration videos from a script.
+Two VCV Rack modules for making demonstration videos: one that performs them from a script, and one that records you performing them yourself.
 
 You write what happens as a markdown file — patch this to that, turn this knob, open that menu — and the module performs it: a drawn pointer travels to each control, a narrated line is spoken in a rendered voice, and the whole take is recorded to an MP4 that needs no editing.
 
@@ -39,6 +39,71 @@ Your own patch is saved when a run starts and restored when the demo is finished
 Recording uses ScreenCaptureKit and needs **Screen Recording** permission, granted to Rack itself in System Settings under Privacy & Security. macOS asks the first time and Rack must be restarted afterwards; it is granted once and stays granted.
 
 The file contains Rack's window and Rack's own audio — the patch and the narration together, already in sync — at up to 2048 pixels wide and thirty frames a second.
+
+### Demo Recorder — a take performed by hand
+
+A second module, and a different job: it plays nothing, it watches. **F9** starts and stops
+recording Rack's window; clicking its panel does the same. While it records, the lamp is red and
+the panel shows the elapsed time and how many moments it has noticed.
+
+It exists because a script has to be able to express every gesture in a demonstration, and any
+gesture it cannot express has to be built into it first. Performing by hand needs none of that.
+What performing by hand lacks is the script's other half — the words — and that is what the
+record of events is for.
+
+Beside the MP4 it writes a text file of the same name: one line per moment, timed from the
+instant recording started.
+
+```
+  0.00  recording started
+  4.21  Fundamental VCO, Frequency, pressed
+  5.02  Fundamental VCO, Frequency set to 440.000 Hz
+  6.80  view moved down to row 1
+  9.15  2 rows on show
+ 12.44  cable made
+```
+
+What is written down is mostly the effect rather than the input. That a button went down says
+nothing worth captioning; that the view moved a row, that a cable appeared, that a knob is now
+at 440 Hz, is what a caption would say. Presses and menus are noted too, since a moment can pass
+without changing anything the patch remembers.
+
+The view's own lines — which row, how many rows — come from Clarity, when Clarity is installed.
+Everything else is asked of Rack.
+
+**The cursor is not in the film.** The recorder is told not to draw it, because a scripted take
+draws its own pointer. For a take performed by hand, switch on Clarity's drawn pointer: it is
+drawn into the rack itself, so it is in the picture, and it flashes on a click and names a held
+modifier. Screen magnification does not appear in the recording either — the window's content is
+taken from the compositor, not the screen — so you can magnify while performing.
+
+### Captions afterwards
+
+`tools/caption.py` burns captions onto a recorded take. You write them as markdown of the same
+shape as a script: a heading per caption, the time it appears, the words underneath.
+
+```
+## 0:04.2
+The wheel moves a row at a time.
+
+## 0:11.7 top
+Command with the arrows changes how many rows are shown.
+
+## 0:18 clear
+```
+
+A caption appears at its own time and stays until the next heading. `top` puts one at the top of
+the picture instead of the bottom, for a moment when what is being described is happening where
+the caption would otherwise sit; `clear` takes it away.
+
+```
+tools/caption.py "take.mp4" captions.md
+```
+
+It draws each caption to a picture and lays it over the film with ffmpeg's `overlay`, rather
+than handing the words to ffmpeg — the ffmpeg in Homebrew is built without freetype and libass,
+so it has neither `drawtext` nor `subtitles` nor `ass`. Needs Python's PIL, which ships with the
+system Python on this machine.
 
 ### Voices
 

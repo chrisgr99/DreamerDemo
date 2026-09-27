@@ -1176,6 +1176,17 @@ void Runner::openPatch() {
 		gDemoPath = patchPath;
 		APP->patch->path = gDemoPath;
 		INFO("DreamerDemo: opened %s", patchPath.c_str());
+		// THE VIEW THE SCRIPT ASKED TO OPEN ON, before anything is drawn. How many rows are on
+		// show is a setting of Clarity's rather than anything the patch carries, so a script
+		// about the rows themselves opened on whatever the last person had left it at.
+		if (rows > 0) {
+			if (RowsFn setRows = (RowsFn) claritySymbol("drRowViewRows"))
+				setRows(rows);
+		}
+		if (haveTopRow) {
+			if (RowsFn setTop = (RowsFn) claritySymbol("drRowViewTop"))
+				setTop(topRow);
+		}
 		// FRAMED AT ONCE, not eased into. The patch that is loaded is not the one the view was
 		// set for, so the first thing a take showed was the new rack half off the top of the
 		// window, sliding into place while the opening sentence was already being spoken.
@@ -1198,7 +1209,7 @@ NOT BESIDE THE SCRIPTS. A finished take is not part of the plugin's working mate
 file to be watched, uploaded or thrown away, and it belongs where a person's other finished
 files land rather than buried in an application support folder. Named rather than numbered so
 that a folder of takes can be read. */
-static std::string takePath(const std::string& title) {
+std::string takePath(const std::string& title) {
 	// Rack has no notion of a home directory, so it comes from the environment, as it does for
 	// every other program.
 	const char* home = std::getenv("HOME");

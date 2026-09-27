@@ -78,6 +78,16 @@ struct Script {
 	half seconds before the first word was said. A script states the conditions it needs; the
 	steps are what it shows. */
 	std::vector<std::pair<std::string, float> > before;
+	/** HOW THE VIEW IS SET BEFORE THE FIRST FRAME, for a script about the view itself.
+
+	The `rows` and `row` steps do this too, but a step happens after the patch is on screen, so
+	the take opened on whatever the last person to use Rack had left the count at and then
+	visibly rearranged itself. These are applied in the same breath as the patch is loaded.
+
+	Nought for rows means leave it; the top row is only set when the script gave one. */
+	int rows = 0;
+	int topRow = 0;
+	bool haveTopRow = false;
 
 	std::vector<Step> steps;
 
