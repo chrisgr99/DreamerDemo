@@ -160,7 +160,7 @@ struct RecorderWidget : ModuleWidget {
 	double recordFrom = 0.0;
 	int events = 0;
 	int wasTop = 0, wasRows = 0, wasCables = -1, wasModules = -1;
-	bool wasHeld = false, keyHeld = false, buttonWas = false, wasMenu = false;
+	bool wasHeld = false, keyHeld = false, wasMenu = false;
 	/** THE CONTROL A PRESS LANDED ON, and what it read before the hand moved it. A knob turned
 	is one of the few things worth captioning that leaves no other trace: no cable appears, the
 	view does not move, and the only evidence is a number that is now different. Noted when the
@@ -350,16 +350,6 @@ struct RecorderWidget : ModuleWidget {
 	void step() override {
 		ModuleWidget::step();
 		recordKey();
-		// The panel's own button, for when the keyboard is not to hand.
-		if (module) {
-			const bool down = module->params[RecorderModule::P_RECORD].getValue() > 0.5f;
-			if (down != buttonWas) {
-				buttonWas = down;
-				if (down)
-					toggle();
-			}
-		}
-
 		watch();
 
 		// A TAKE THAT HAS JUST BEEN WRITTEN SAYS SO, with its path on the clipboard, which is
@@ -376,11 +366,15 @@ struct RecorderWidget : ModuleWidget {
 		}
 	}
 
+	/** The lamp, which is the only thing on this panel that can be pressed. Everywhere else is
+	panel, and a press on panel drags the module about as it does on any other. */
+	math::Rect lamp() const {
+		return math::Rect(math::Vec(box.size.x / 2.f - 15.f, 37.f), math::Vec(30.f, 30.f));
+	}
+
 	void onButton(const ButtonEvent& e) override {
-		// The lamp is the button: a press anywhere on the face starts or stops it, since there
-		// is nothing else on this panel to press.
 		if (e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT
-			&& (e.mods & RACK_MOD_MASK) == 0) {
+			&& (e.mods & RACK_MOD_MASK) == 0 && lamp().contains(e.pos)) {
 			toggle();
 			e.consume(this);
 			return;
